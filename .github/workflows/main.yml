@@ -24,7 +24,7 @@ jobs:
         pip install -r requirements.txt
 
     - name: Run tests
-      run: pytest  # Update if you use a different command for tests
+      run: python -m unittest discover -s tests
 
     # Add additional steps for linting, formatting, or other checks
 
