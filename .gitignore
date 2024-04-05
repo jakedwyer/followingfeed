@@ -24,3 +24,6 @@ xfeed/
 
 # Output files
 output/
+
+*.pkl
+
