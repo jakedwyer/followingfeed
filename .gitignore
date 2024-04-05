@@ -27,3 +27,5 @@ output/
 
 *.pkl
 
+gh-actions-deploy-key
+gh-actions-deploy-key.pub
