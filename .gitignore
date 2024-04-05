@@ -1,0 +1,26 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# Virtual Environment
+xfeed/
+
+# Environment variables
+.env
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# macOS specific
+.DS_Store
+
+# Logs and databases
+*.log
+*.db
+
+# Temp files
+.temp/
+
+# Output files
+output/
