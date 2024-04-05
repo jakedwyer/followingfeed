@@ -54,7 +54,6 @@ pathspec
 pillow
 pinecone-client
 platformdirs
-playsound
 pluggy
 pre-commit
 proto-plus
@@ -102,5 +101,4 @@ uritemplate
 urllib3
 virtualenv
 webdriver-manager
-wheel
 wsproto
