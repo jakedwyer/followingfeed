@@ -19,7 +19,13 @@ from selenium.common.exceptions import TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
 
 dotenv.load_dotenv()
-logging.basicConfig(level=logging.INFO)
+log_file_path = "app.log"
+logging.basicConfig(
+    filename=log_file_path,
+    filemode="a",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
 # Load environment variables
 bearer_token = os.getenv("Bearer")
 
@@ -78,10 +84,10 @@ def authenticate_twitter_api():
     api = tweepy.API(auth, wait_on_rate_limit=True)
     try:
         api.verify_credentials()
-        print("Authentication OK")
+        logging.info("Authentication OK")
         return api
     except Exception as e:
-        print(f"Error during authentication: {e}")
+        logging.error(f"Error during authentication: {e}")
         return None
 
 
@@ -91,7 +97,7 @@ def fetch_list_members(list_id):
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
         members_data = response.json()
-        print(members_data)
+        logging.info(str(members_data))
         return [
             (member["username"], member["id"])
             for member in members_data.get("data", [])
@@ -112,7 +118,7 @@ def init_driver():
     service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
     driver.set_window_size(1920, 1080)
-    print("WebDriver Initialized")
+    logging.info("WebDriver Initialized")
     return driver
 
 
