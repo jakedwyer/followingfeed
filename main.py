@@ -33,6 +33,43 @@ bearer_token = os.getenv("Bearer")
 access_token = os.getenv("accessToken")
 access_token_secret = os.getenv("accessTokenSecret")
 
+from datetime import datetime
+import os
+import csv
+
+
+def ensure_user_directory_exists(handle):
+    """Ensure that a directory exists for the user."""
+    user_dir = os.path.join("output", handle)
+    if not os.path.exists(user_dir):
+        os.makedirs(user_dir)
+    return user_dir
+
+
+def save_cumulative_follows(handle, follows):
+    """Save the cumulative list of follows for a user."""
+    user_dir = ensure_user_directory_exists(handle)
+    cumulative_file = os.path.join(user_dir, "cumulative_follows.csv")
+    with open(cumulative_file, mode="w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        for follow in follows:
+            writer.writerow([follow])
+
+
+def save_incremental_updates(handle, new_follows):
+    """Save the incremental updates of new follows for a user."""
+    if not new_follows:  # Skip if no new follows
+        return
+    user_dir = ensure_user_directory_exists(handle)
+    incremental_file = os.path.join(user_dir, "incremental_updates.csv")
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(
+        incremental_file, mode="a", newline="", encoding="utf-8"
+    ) as file:  # Append mode
+        writer = csv.writer(file)
+        for follow in new_follows:
+            writer.writerow([timestamp, follow])
+
 
 # Twitter API Authentication
 def authenticate_twitter_api():
@@ -105,22 +142,18 @@ def get_following(driver, handle, existing_follows, max_accounts=None):
 
     scroll_pause_time = 10  # Increased pause time to ensure page loading
     incremental_scroll = 100  # Gradual scroll to load more data
-    last_height = driver.execute_script("return document.body.scrollHeight")
-    logging.info("Scrolling to the bottom of the page to load all data.")
     extracted_handles = set(existing_follows)
     logging.info(f"Existing handles: {len(existing_follows)}")
     try:
+        # Use a different approach to detect end of scrolling
+        # Check for the presence of a "You’re caught up" or similar message
+        # or no new elements found after scroll
+        previous_handles_count = len(extracted_handles)
         while True:
             driver.execute_script(
                 f"window.scrollBy(0, {incremental_scroll});"
             )  # Gradual scrolling
             time.sleep(scroll_pause_time)  # Wait for the page to load
-            new_height = driver.execute_script("return document.body.scrollHeight")
-
-            if new_height == last_height:
-                logging.info("Reached the bottom of the page or no new data to load.")
-                break
-            last_height = new_height
 
             elements = driver.find_elements(
                 By.XPATH,
@@ -139,6 +172,12 @@ def get_following(driver, handle, existing_follows, max_accounts=None):
 
             # Debugging: Log current state of extracted handles
             logging.info(f"Current total extracted handles: {len(extracted_handles)}")
+
+            # Check if no new handles were found in the last scroll
+            if len(extracted_handles) == previous_handles_count:
+                logging.info("No new data to load or reached the end of the page.")
+                break
+            previous_handles_count = len(extracted_handles)
 
             # Check for max accounts limit
             if max_accounts and len(extracted_handles) >= max_accounts:
@@ -223,8 +262,18 @@ def main():
             new_follows = get_following(
                 driver, username, existing_follows, max_accounts=None
             )
-            if set(new_follows) != existing_follows:
-                new_data[username] = new_follows
+
+            # Identify new follows by comparing with the old data
+            new_follows_set = set(new_follows)
+            old_follows_set = set(existing_follows)
+            truly_new_follows = new_follows_set.difference(old_follows_set)
+
+            # Save incremental updates if there are truly new follows
+            if truly_new_follows:
+                save_incremental_updates(username, truly_new_follows)
+
+            # Always update the cumulative follows file
+            save_cumulative_follows(username, new_follows)
 
             processed_members += 1
             remaining_members = total_members - processed_members
