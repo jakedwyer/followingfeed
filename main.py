@@ -20,19 +20,18 @@ from selenium.common.exceptions import TimeoutException
 dotenv.load_dotenv()
 logging.basicConfig(level=logging.INFO)
 # Load environment variables
-bearer_token = os.getenv('Bearer')
+bearer_token = os.getenv("Bearer")
 
 # Twitter API headers
-headers = {
-    "Authorization": f"Bearer {bearer_token}"
-}
+headers = {"Authorization": f"Bearer {bearer_token}"}
 
 # Load environment variables from .env file
-consumer_key = os.getenv('consumerKey')
-consumer_secret = os.getenv('consumerSecret')
-bearer_token = os.getenv('Bearer')
-access_token = os.getenv('accessToken')
-access_token_secret = os.getenv('accessTokenSecret')
+consumer_key = os.getenv("consumerKey")
+consumer_secret = os.getenv("consumerSecret")
+bearer_token = os.getenv("Bearer")
+access_token = os.getenv("accessToken")
+access_token_secret = os.getenv("accessTokenSecret")
+
 
 # Twitter API Authentication
 def authenticate_twitter_api():
@@ -47,6 +46,7 @@ def authenticate_twitter_api():
         print(f"Error during authentication: {e}")
         return None
 
+
 # Fetch List Members
 def fetch_list_members(list_id):
     url = f"https://api.twitter.com/2/lists/{list_id}/members"
@@ -54,15 +54,16 @@ def fetch_list_members(list_id):
     if response.status_code == 200:
         members_data = response.json()
         print(members_data)
-        return [(member['username'], member['id']) for member in members_data.get('data', [])]
+        return [
+            (member["username"], member["id"])
+            for member in members_data.get("data", [])
+        ]
     else:
         logging.error(f"Error fetching list members: {response.status_code}")
         logging.error(f"Response: {response.text}")
         return []
 
 
-
-    
 # Initialize Selenium WebDriver
 def init_driver():
     options = Options()
@@ -70,11 +71,12 @@ def init_driver():
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    service = Service('/usr/local/bin/chromedriver')
+    service = Service("/usr/local/bin/chromedriver")
     driver = webdriver.Chrome(service=service, options=options)
     driver.set_window_size(1920, 1080)
     print("WebDriver Initialized")
     return driver
+
 
 # Load Cookies into WebDriver
 def load_cookies(driver, cookie_path):
@@ -87,7 +89,7 @@ def load_cookies(driver, cookie_path):
 
 
 def get_following(driver, handle, existing_follows, max_accounts=None):
-    url = f'https://twitter.com/{handle}/following'
+    url = f"https://twitter.com/{handle}/following"
     driver.get(url)
     logging.info(f"Fetching new following for {handle}")
     time.sleep(5)
@@ -100,7 +102,9 @@ def get_following(driver, handle, existing_follows, max_accounts=None):
     logging.info(f"Existing handles: {len(existing_follows)}")
     try:
         while True:
-            driver.execute_script(f"window.scrollBy(0, {incremental_scroll});")  # Gradual scrolling
+            driver.execute_script(
+                f"window.scrollBy(0, {incremental_scroll});"
+            )  # Gradual scrolling
             time.sleep(scroll_pause_time)  # Wait for the page to load
             new_height = driver.execute_script("return document.body.scrollHeight")
 
@@ -109,8 +113,16 @@ def get_following(driver, handle, existing_follows, max_accounts=None):
                 break
             last_height = new_height
 
-            elements = driver.find_elements(By.XPATH, "//div[@aria-label='Timeline: Following']//a[contains(@href, '/')]")
-            current_handles = {el.get_attribute('href').split('/')[-1] for el in elements if '/following' not in el.get_attribute('href') and 'search?q=%23' not in el.get_attribute('href')}
+            elements = driver.find_elements(
+                By.XPATH,
+                "//div[@aria-label='Timeline: Following']//a[contains(@href, '/')]",
+            )
+            current_handles = {
+                el.get_attribute("href").split("/")[-1]
+                for el in elements
+                if "/following" not in el.get_attribute("href")
+                and "search?q=%23" not in el.get_attribute("href")
+            }
 
             new_handles = current_handles.difference(extracted_handles)
             logging.info(f"Found {len(new_handles)} new handles.")
@@ -130,7 +142,6 @@ def get_following(driver, handle, existing_follows, max_accounts=None):
     return list(extracted_handles)
 
 
-
 def send_to_webhook(url, data):
     try:
         response = requests.post(url, json=data)
@@ -139,10 +150,11 @@ def send_to_webhook(url, data):
     except requests.exceptions.RequestException as e:
         logging.error(f"Error sending data to webhook: {e}")
 
+
 def read_csv_data(filename):
     data = {}
     try:
-        with open(filename, mode='r', newline='', encoding='utf-8') as file:
+        with open(filename, mode="r", newline="", encoding="utf-8") as file:
             reader = csv.reader(file)
             for row in reader:
                 if row:
@@ -157,7 +169,7 @@ def load_old_data(filename):
     """Load previously saved following data."""
     old_data = {}
     try:
-        with open(filename, mode='r', newline='', encoding='utf-8') as file:
+        with open(filename, mode="r", newline="", encoding="utf-8") as file:
             reader = csv.reader(file)
             for row in reader:
                 if row:
@@ -167,17 +179,18 @@ def load_old_data(filename):
         pass
     return old_data
 
+
 def save_new_data(filename, data):
     """Save new following data."""
-    with open(filename, mode='w', newline='', encoding='utf-8') as file:
+    with open(filename, mode="w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
         for handle, follows in data.items():
             writer.writerow([handle] + list(follows))
-    logging.info("New data saved.")            
+    logging.info("New data saved.")
 
 
 def main():
-    list_id = os.getenv('list_id')
+    list_id = os.getenv("list_id")
     list_members = fetch_list_members(list_id)
 
     if not list_members:
@@ -188,35 +201,39 @@ def main():
     processed_members = 0
 
     driver = init_driver()
-    cookie_path = os.getenv('cookie_path')
+    cookie_path = os.getenv("cookie_path")
     load_cookies(driver, cookie_path)
 
-    old_data = load_old_data('following.csv')
+    old_data = load_old_data("following.csv")
     new_data = {}
 
     for username, _ in list_members:
         try:
             existing_follows = old_data.get(username, set())
             logging.info(f"Esisting follows: {existing_follows}")
-            new_follows = get_following(driver, username, existing_follows, max_accounts=None)
+            new_follows = get_following(
+                driver, username, existing_follows, max_accounts=None
+            )
             if set(new_follows) != existing_follows:
                 new_data[username] = new_follows
 
             processed_members += 1
             remaining_members = total_members - processed_members
-            logging.info(f"Processed {processed_members}/{total_members}. Remaining: {remaining_members}")
+            logging.info(
+                f"Processed {processed_members}/{total_members}. Remaining: {remaining_members}"
+            )
 
         except Exception as e:
             logging.error(f"Error processing {username}: {e}")
 
     if new_data:
-        save_new_data('following.csv', new_data)
+        save_new_data("following.csv", new_data)
         logging.info("Following data updated.")
     else:
         logging.info("No new followings to update.")
     # Log details of the output from the run in a file
     logging.info("Data collection complete. Check the output file.")
-    
+
     driver.quit()
 
 
