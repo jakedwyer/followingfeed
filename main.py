@@ -16,6 +16,7 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
+from webdriver_manager.chrome import ChromeDriverManager
 
 dotenv.load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -66,12 +67,12 @@ def fetch_list_members(list_id):
 
 # Initialize Selenium WebDriver
 def init_driver():
-    options = Options()
-    options.add_argument("--headless")
+    options = webdriver.ChromeOptions()
+    # options.add_argument("--headless")
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    service = Service("/usr/local/bin/chromedriver")
+    service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
     driver.set_window_size(1920, 1080)
     print("WebDriver Initialized")
@@ -92,7 +93,15 @@ def get_following(driver, handle, existing_follows, max_accounts=None):
     url = f"https://twitter.com/{handle}/following"
     driver.get(url)
     logging.info(f"Fetching new following for {handle}")
-    time.sleep(5)
+    time.sleep(10)  # Initial wait for page load
+
+    # Check if initial links are loaded
+    initial_elements = driver.find_elements(
+        By.XPATH, "//div[@aria-label='Timeline: Following']//a[contains(@href, '/')]"
+    )
+    if not initial_elements:
+        logging.error("No following links loaded on the page. Exiting function.")
+        return list(existing_follows)
 
     scroll_pause_time = 10  # Increased pause time to ensure page loading
     incremental_scroll = 100  # Gradual scroll to load more data
@@ -210,7 +219,7 @@ def main():
     for username, _ in list_members:
         try:
             existing_follows = old_data.get(username, set())
-            logging.info(f"Esisting follows: {existing_follows}")
+            logging.info(f"Existing follows: {existing_follows}")
             new_follows = get_following(
                 driver, username, existing_follows, max_accounts=None
             )
