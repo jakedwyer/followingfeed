@@ -33,14 +33,23 @@ jobs:
     needs: build-and-test
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.12'
-    - name: Install dependencies
-      run: |
-        pip install --upgrade pip
-        pip install -r requirements.txt
-    - name: Run main script
-      run: python main.py
+      - uses: actions/checkout@v2
+  
+      # SSH into the server
+      - name: Deploy to Digital Ocean server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /root/Follow Feed/
+            # Activate the virtual environment
+            source xfeed/bin/activate
+            # Pull the latest changes
+            git pull origin master
+            # Install any new dependencies
+            pip install -r requirements.txt
+            # Restart the server or run your script
+            python main.py
+  
