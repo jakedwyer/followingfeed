@@ -18,10 +18,11 @@ xfeed/
 # Logs and databases
 *.log
 *.db
-
+decrypt_files.sh
+*.gpg
 # Temp files
 .temp/
-
+/secure/
 # Output files
 output/
 
