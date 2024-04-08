@@ -23,8 +23,6 @@ decrypt_files.sh
 # Temp files
 .temp/
 /secure/
-# Output files
-output/
 
 *.pkl
 
