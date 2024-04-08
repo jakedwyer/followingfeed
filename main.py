@@ -8,6 +8,7 @@ import logging
 import time
 import pickle
 import csv
+import random
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -146,7 +147,9 @@ def get_following(driver, handle, existing_follows, max_accounts=None):
         logging.error("No following links loaded on the page. Exiting function.")
         return list(existing_follows)
 
-    scroll_pause_time = 10  # Increased pause time to ensure page loading
+    scroll_pause_time = random.randint(
+        1, 5
+    )  # Increased pause time to ensure page loading
     incremental_scroll = 100  # Gradual scroll to load more data
     extracted_handles = set(existing_follows)
     logging.info(f"Existing handles: {len(existing_follows)}")
