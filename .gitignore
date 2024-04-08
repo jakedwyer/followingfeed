@@ -30,3 +30,4 @@ output/
 
 gh-actions-deploy-key
 gh-actions-deploy-key.pub
+encrypt_sync.sh
