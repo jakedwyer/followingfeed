@@ -29,3 +29,4 @@ decrypt_files.sh
 gh-actions-deploy-key
 gh-actions-deploy-key.pub
 encrypt_sync.sh
+*.code-workspace
