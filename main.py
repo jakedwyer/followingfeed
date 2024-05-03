@@ -210,7 +210,6 @@ def send_to_webhook(url, data):
     except requests.exceptions.RequestException as e:
         logging.error(f"Error sending data to webhook: {e}")
 
-
 def read_csv_data(filename):
     data = {}
     try:
