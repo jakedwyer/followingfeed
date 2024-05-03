@@ -145,6 +145,9 @@ def get_following(driver, handle, existing_follows, max_accounts=None):
     )
     if not initial_elements:
         logging.error("No following links loaded on the page. Exiting function.")
+        screenshot_path = f"screenshots/{handle}_following.png"
+        driver.save_screenshot(screenshot_path)
+        logging.info(f"Screenshot saved at {screenshot_path}")
         return list(existing_follows)
 
     scroll_pause_time = random.randint(
@@ -261,12 +264,23 @@ def main():
     cookie_path = os.getenv("cookie_path")
     load_cookies(driver, cookie_path)
 
-    old_data = load_old_data("following.csv")
     new_data = {}
 
     for username, _ in list_members:
         try:
-            existing_follows = old_data.get(username, set())
+            # Load existing follows from the cumulative follows file
+            user_dir = ensure_user_directory_exists(username)
+            cumulative_file = os.path.join(user_dir, "cumulative_follows.csv")
+            existing_follows = set()
+            try:
+                with open(cumulative_file, mode="r", newline="", encoding="utf-8") as file:
+                    reader = csv.reader(file)
+                    for row in reader:
+                        if row:
+                            existing_follows.add(row[0])
+            except FileNotFoundError:
+                logging.info(f"No existing follows file found for {username}, starting fresh.")
+
             logging.info(f"Existing follows: {existing_follows}")
             new_follows = get_following(
                 driver, username, existing_follows, max_accounts=None
@@ -274,7 +288,7 @@ def main():
 
             # Identify new follows by comparing with the old data
             new_follows_set = set(new_follows)
-            old_follows_set = set(existing_follows)
+            old_follows_set = existing_follows
             truly_new_follows = new_follows_set.difference(old_follows_set)
 
             # Save incremental updates if there are truly new follows
@@ -294,7 +308,7 @@ def main():
             logging.error(f"Error processing {username}: {e}")
 
     if new_data:
-        save_new_data("following.csv", new_data)
+        # This block might be redundant as new_data is not being populated
         logging.info("Following data updated.")
     else:
         logging.info("No new followings to update.")
