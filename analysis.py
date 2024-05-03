@@ -18,9 +18,11 @@ all_followers_df = aggregate_followers()
 
 
 def rank_accounts(df):
-    rank_df = df["follower"].value_counts().reset_index()
-    rank_df.columns = ["account", "follower_count"]
-    rank_df.sort_values(by="follower_count", ascending=False, inplace=True)
+    # Normalize the account names to lower case
+    df['follower'] = df['follower'].str.lower()
+    rank_df = df['follower'].value_counts().reset_index()
+    rank_df.columns = ['account', 'follower_count']
+    rank_df.sort_values(by='follower_count', ascending=False, inplace=True)
     return rank_df
 
 
