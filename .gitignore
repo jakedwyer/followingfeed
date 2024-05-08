@@ -30,8 +30,5 @@ gh-actions-deploy-key
 gh-actions-deploy-key.pub
 encrypt_sync.sh
 *.code-workspace
-<<<<<<< HEAD
 /dev
-=======
 output.zip
->>>>>>> origin/master
