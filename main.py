@@ -1,6 +1,5 @@
 import tweepy
 import os
-import sys
 import dotenv
 import requests
 import json
@@ -18,6 +17,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
 from webdriver_manager.chrome import ChromeDriverManager
+import pandas as pd
+
+
 
 dotenv.load_dotenv()
 log_file_path = "app.log"
@@ -111,16 +113,18 @@ def fetch_list_members(list_id):
 
 # Initialize Selenium WebDriver
 def init_driver():
-    options = webdriver.ChromeOptions()
+    options = Options()
     options.add_argument("--headless")
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     service = Service(ChromeDriverManager().install())
+    logging.info(f"Using ChromeDriver version: {service.path}")  # Log the path to check version
     driver = webdriver.Chrome(service=service, options=options)
     driver.set_window_size(1920, 1080)
-    logging.info("WebDriver Initialized")
+    logging.info("WebDriver initialized.")
     return driver
+
 
 
 # Load Cookies into WebDriver
@@ -265,6 +269,9 @@ def main():
 
     new_data = {}
 
+    # Prepare to aggregate incremental updates for output similar to analysis.py
+    all_updates = []
+
     for username, _ in list_members:
         try:
             # Load existing follows from the cumulative follows file
@@ -293,6 +300,9 @@ def main():
             # Save incremental updates if there are truly new follows
             if truly_new_follows:
                 save_incremental_updates(username, truly_new_follows)
+                # Collect data for the singular output file
+                for follow in truly_new_follows:
+                    all_updates.append({'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"), 'account': follow, 'followed by': username})
 
             # Always update the cumulative follows file
             save_cumulative_follows(username, new_follows)
@@ -306,11 +316,14 @@ def main():
         except Exception as e:
             logging.error(f"Error processing {username}: {e}")
 
-    if new_data:
-        # This block might be redundant as new_data is not being populated
-        logging.info("Following data updated.")
+    # Save all collected incremental updates to a single CSV file
+    if all_updates:
+        df = pd.DataFrame(all_updates)
+        df.to_csv('incremental_updates_list.csv', index=False)
+        logging.info("Incremental updates list saved to 'incremental_updates_list.csv'.")
     else:
         logging.info("No new followings to update.")
+
     # Log details of the output from the run in a file
     logging.info("Data collection complete. Check the output file.")
 
