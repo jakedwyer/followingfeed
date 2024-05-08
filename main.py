@@ -70,10 +70,14 @@ def main():
             logging.error(f"Error processing {username}: {e}")
 
     if all_updates:
+        # Create a DataFrame from the list of updates
         df = pd.DataFrame(all_updates)
-        df.to_csv('incremental_updates_list.csv', index=False)
-        logging.info("Incremental updates list saved to 'incremental_updates_list.csv'.")
+        # Append the DataFrame to a CSV file without replacing the current contents and without the index column
+        df.to_csv('incremental_updates_list.csv', mode='a', header=False, index=False)
+        # Log the successful appending of the updates
+        logging.info("Incremental updates list appended to 'incremental_updates_list.csv'.")
     else:
+        # Log that there are no new followings to update if the all_updates list is empty
         logging.info("No new followings to update.")
 
     # Extract all unique usernames for detailed account fetching
