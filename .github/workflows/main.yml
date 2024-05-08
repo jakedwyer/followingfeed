@@ -41,7 +41,7 @@ jobs:
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          key: ${{ secrets.DIGITALOCEAN_SSH_KEY }}
           script: |
             cd /root/Follow Feed/
             # Activate the virtual environment
@@ -52,4 +52,5 @@ jobs:
             pip install -r requirements.txt
             # Restart the server or run your script
             python main.py
-  
+            # Debugging information
+            echo "Deployment completed successfully."
