@@ -32,3 +32,5 @@ encrypt_sync.sh
 *.code-workspace
 /dev
 output.zip
+github_rsa
+github_rsa.pub
