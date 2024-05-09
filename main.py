@@ -88,6 +88,6 @@ def main():
     fetch_and_save_accounts(unique_usernames, target_accounts_file, headers)
 
     driver.quit()
-
+## Add the following line to the end of the main function to call the main function when the script is run
 if __name__ == "__main__":
     main()
