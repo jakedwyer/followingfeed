@@ -11,7 +11,9 @@ def aggregate_incremental_updates():
             df['followed by'] = handle  # Add the handle to each row
             all_updates.append(df)
 
-    return pd.concat(all_updates, ignore_index=True)
+    combined_df = pd.concat(all_updates, ignore_index=True)
+    deduped_df = combined_df.drop_duplicates(subset=['account', 'followed by'])
+    return deduped_df
 
 incremental_updates_df = aggregate_incremental_updates()
 incremental_updates_df.to_csv('incremental_updates_list.csv', index=False)

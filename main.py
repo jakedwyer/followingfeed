@@ -70,12 +70,25 @@ def main():
             logging.error(f"Error processing {username}: {e}")
 
     if all_updates:
+    # Read existing incremental updates
+        try:
+            existing_df = pd.read_csv('incremental_updates_list.csv')
+        except FileNotFoundError:
+            existing_df = pd.DataFrame(columns=['timestamp', 'account', 'followed by'])
+
         # Create a DataFrame from the list of updates
-        df = pd.DataFrame(all_updates)
-        # Append the DataFrame to a CSV file without replacing the current contents and without the index column
-        df.to_csv('incremental_updates_list.csv', mode='a', header=False, index=False)
-        # Log the successful appending of the updates
-        logging.info("Incremental updates list appended to 'incremental_updates_list.csv'.")
+        new_updates_df = pd.DataFrame(all_updates)
+
+        # Combine existing and new updates
+        combined_df = pd.concat([existing_df, new_updates_df], ignore_index=True)
+
+        # Remove duplicates
+        deduped_df = combined_df.drop_duplicates(subset=['account', 'followed by'])
+
+        # Save the deduplicated DataFrame back to the CSV file
+        deduped_df.to_csv('incremental_updates_list.csv', index=False)
+
+        logging.info("Incremental updates list saved to 'incremental_updates_list.csv'.")
     else:
         # Log that there are no new followings to update if the all_updates list is empty
         logging.info("No new followings to update.")
