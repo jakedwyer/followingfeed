@@ -20,15 +20,31 @@ def init_driver():
     logging.info("WebDriver initialized.")
     return driver
 
+import datetime
+
 def load_cookies(driver, cookie_path):
-    """Load cookies into Selenium WebDriver."""
     driver.get("https://twitter.com")
+    """Load cookies into Selenium WebDriver."""
+    # Load the cookies from the file
     with open(cookie_path, "rb") as file:
         cookies = pickle.load(file)
+    
+    # Navigate to the correct domain before adding cookies
+    driver.get("https://twitter.com")
+    
+    # Delete all existing cookies
+    driver.delete_all_cookies()
+    
     for cookie in cookies:
+        # Ensure the cookie domain matches the current domain
+        if 'domain' in cookie:
+            del cookie['domain']
         driver.add_cookie(cookie)
+    
     logging.info("Cookies loaded into WebDriver.")
     driver.refresh()
+
+
 
 def get_following(driver, handle, existing_follows, max_accounts=None):
     """Fetch following accounts for a specific user using Selenium."""
