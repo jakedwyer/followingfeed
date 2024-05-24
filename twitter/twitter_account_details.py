@@ -9,16 +9,16 @@ def get_user_details(username, headers):
     """Fetch detailed information of a specific Twitter user, handling rate limits."""
     user_fields = "id,name,username,created_at,description,public_metrics,verified"
     url = f"https://api.twitter.com/2/users/by/username/{username}?user.fields={user_fields}"
-    while True:
+    retry_count = 0
+    while retry_count < 4:
         response = requests.get(url, headers=headers)
         if response.status_code == 200:
             response_data = response.json()
             if 'errors' in response_data:
                 logging.error(f"Error fetching user details for {username}: {response_data['errors']}")
                 return None
-            else:
-                logging.info(f"User details for {username} fetched successfully.")
-                return response_data
+            logging.info(f"User details for {username} fetched successfully.")
+            return response_data
         elif response.status_code == 429:
             process_accounts()
             reset_time = int(response.headers.get('x-rate-limit-reset', time.time() + 900))  # Default to 15 minutes later
@@ -26,10 +26,12 @@ def get_user_details(username, headers):
             if sleep_duration > 0:
                 logging.info(f"Rate limit exceeded. Sleeping for {sleep_duration} seconds.")
                 time.sleep(sleep_duration)
-            continue
+            retry_count += 1
         else:
             logging.error(f"Failed to retrieve user details: {response.status_code}")
             return None
+    logging.error(f"Failed to retrieve user details after {retry_count} retries.")
+    return None
 
 def save_user_details_to_csv(filename, user_details):
     """Save detailed Twitter user information to a CSV file."""
@@ -43,9 +45,10 @@ def save_user_details_to_csv(filename, user_details):
         'listed_count': user_details['data']['public_metrics']['listed_count']
     }
     fieldnames = ['id', 'name', 'username', 'created_at', 'description', 'followers_count', 'listed_count']
+    file_exists = os.path.isfile(filename)
     with open(filename, 'a', newline='', encoding='utf-8') as file:
         writer = csv.DictWriter(file, fieldnames=fieldnames)
-        if file.tell() == 0:
+        if not file_exists:
             writer.writeheader()
         writer.writerow(user_data)
 
