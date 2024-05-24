@@ -5,6 +5,7 @@ from utils.data_utils import ensure_user_directory_exists, save_cumulative_follo
 from twitter.twitter import authenticate_twitter_api, fetch_list_members
 from scraping.scraping import init_driver, load_cookies, get_following
 from twitter.twitter_account_details import fetch_and_save_accounts
+from utils.cumulative_analysis import process_accounts
 import pandas as pd
 from datetime import datetime
 import os
@@ -99,8 +100,12 @@ def main():
     # Fetch user details and save them to a deduplicated output
     target_accounts_file = 'target_accounts.csv'
     fetch_and_save_accounts(unique_usernames, target_accounts_file, headers)
-
+    
     driver.quit()
+
+    # Call the process_accounts function from cumulative_analysis.py
+    process_accounts()
+
 ## Add the following line to the end of the main function to call the main function when the script is run
 if __name__ == "__main__":
     main()
