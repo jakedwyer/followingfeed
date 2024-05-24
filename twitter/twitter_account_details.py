@@ -3,6 +3,7 @@ import os
 import csv
 import logging
 import time
+from utils.cumulative_analysis import process_accounts
 
 def get_user_details(username, headers):
     """Fetch detailed information of a specific Twitter user, handling rate limits."""
@@ -19,6 +20,7 @@ def get_user_details(username, headers):
                 logging.info(f"User details for {username} fetched successfully.")
                 return response_data
         elif response.status_code == 429:
+            process_accounts()
             reset_time = int(response.headers.get('x-rate-limit-reset', time.time() + 900))  # Default to 15 minutes later
             sleep_duration = reset_time - time.time()
             if sleep_duration > 0:

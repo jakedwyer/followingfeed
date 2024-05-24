@@ -9,8 +9,9 @@ def process_accounts():
         for row in reader:
             target_accounts[row['username']] = row
 
-    # Load incremental updates and build the followers list
+    # Load incremental updates and build the followers list and first appearance timestamp
     followers = defaultdict(list)
+    first_appearance = {}
     with open('incremental_updates_list.csv', mode='r', encoding='utf-8') as file:
         reader = csv.reader(file, delimiter=',')
         for row in reader:
@@ -18,13 +19,16 @@ def process_accounts():
                 continue
             timestamp, username, follower = row[0], row[1], row[2]
             followers[username].append(follower)
+            if username not in first_appearance:
+                first_appearance[username] = timestamp
 
     # Write the joined data to a new CSV file
     with open('joined_accounts.csv', mode='w', newline='', encoding='utf-8') as file:
-        fieldnames = ['id', 'name', 'username', 'created_at', 'description', 'followers_count', 'listed_count', 'followed_by']
+        fieldnames = ['id', 'name', 'username', 'created_at', 'description', 'followers_count', 'listed_count', 'followed_by', 'first_appearance']
         writer = csv.DictWriter(file, fieldnames=fieldnames)
         writer.writeheader()
 
         for username, account in target_accounts.items():
             account['followed_by'] = ', '.join(followers[username])
+            account['first_appearance'] = first_appearance.get(username, 'N/A')
             writer.writerow(account)
