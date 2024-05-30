@@ -9,29 +9,20 @@ def get_user_details(username, headers):
     """Fetch detailed information of a specific Twitter user, handling rate limits."""
     user_fields = "id,name,username,created_at,description,public_metrics,verified"
     url = f"https://api.twitter.com/2/users/by/username/{username}?user.fields={user_fields}"
-    retry_count = 0
-    while retry_count < 4:
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            response_data = response.json()
-            if 'errors' in response_data:
-                logging.error(f"Error fetching user details for {username}: {response_data['errors']}")
-                return None
-            logging.info(f"User details for {username} fetched successfully.")
-            return response_data
-        elif response.status_code == 429:
-            process_accounts()
-            reset_time = int(response.headers.get('x-rate-limit-reset', time.time() + 900))  # Default to 15 minutes later
-            sleep_duration = reset_time - time.time()
-            if sleep_duration > 0:
-                logging.info(f"Rate limit exceeded. Sleeping for {sleep_duration} seconds.")
-                time.sleep(sleep_duration)
-            retry_count += 1
-        else:
-            logging.error(f"Failed to retrieve user details: {response.status_code}")
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        response_data = response.json()
+        if 'errors' in response_data:
+            logging.error(f"Error fetching user details for {username}: {response_data['errors']}")
             return None
-    logging.error(f"Failed to retrieve user details after {retry_count} retries.")
-    return None
+        logging.info(f"User details for {username} fetched successfully.")
+        return response_data
+    elif response.status_code == 429:
+        logging.info(f"Rate limit exceeded. Max accounts have been pulled for the day.")
+        return None
+    else:
+        logging.error(f"Failed to retrieve user details: {response.status_code}")
+        return None
 
 def save_user_details_to_csv(filename, user_details):
     """Save detailed Twitter user information to a CSV file."""
