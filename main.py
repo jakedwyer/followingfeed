@@ -316,6 +316,11 @@ def main():
 
     driver.quit()
 
+    response = send_file_via_webhook('joined_accounts.csv', 'https://hooks.zapier.com/hooks/catch/14552359/3v03fym/')
+    if response.status_code == 200:
+        logging.info("File sent successfully.")
+    else:
+        logging.error(f"Failed to send file. Status code: {response.status_code}")
 
 if __name__ == "__main__":
     main()
