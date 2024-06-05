@@ -29,4 +29,3 @@ def save_incremental_updates(handle, new_follows):
         writer = csv.writer(file)
         for follow in new_follows:
             writer.writerow([timestamp, follow])
-
