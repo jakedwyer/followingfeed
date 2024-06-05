@@ -1,9 +1,7 @@
 import requests
-import os
-import csv
 import logging
-import time
-from utils.cumulative_analysis import process_accounts
+import pandas as pd
+from utils.airtable import save_data_to_airtable
 
 def get_user_details(username, headers):
     """Fetch detailed information of a specific Twitter user, handling rate limits."""
@@ -24,28 +22,21 @@ def get_user_details(username, headers):
         logging.error(f"Failed to retrieve user details: {response.status_code}")
         return None
 
-def save_user_details_to_csv(filename, user_details):
-    """Save detailed Twitter user information to a CSV file."""
+def save_user_details_to_airtable(user_details):
+    """Save detailed Twitter user information to Airtable."""
     user_data = {
-        'id': user_details['data']['id'],
-        'name': user_details['data']['name'],
-        'username': user_details['data']['username'],
-        'created_at': user_details['data']['created_at'],
-        'description': user_details['data']['description'],
-        'followers_count': user_details['data']['public_metrics']['followers_count'],
-        'listed_count': user_details['data']['public_metrics']['listed_count']
+        'Account ID': user_details['data']['id'],
+        'Full Name': user_details['data']['name'],
+        'Username': user_details['data']['username'],
+        'Created At': user_details['data']['created_at'],
+        'Description': user_details['data']['description'],
+        'Followers Count': user_details['data']['public_metrics']['followers_count'],
+        'Listed Count': user_details['data']['public_metrics']['listed_count']
     }
-    fieldnames = ['id', 'name', 'username', 'created_at', 'description', 'followers_count', 'listed_count']
-    file_exists = os.path.isfile(filename)
-    with open(filename, 'a', newline='', encoding='utf-8') as file:
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
-        if not file_exists:
-            writer.writeheader()
-        writer.writerow(user_data)
+    save_data_to_airtable('Accounts', pd.DataFrame([user_data]))
 
-def fetch_and_save_accounts(unique_usernames, filename, headers):
-    """Fetch user details for each unique username and store them, respecting rate limits."""
-    for username in unique_usernames:
+def fetch_and_save_accounts(usernames, headers):
+    for username in usernames:
         user_details = get_user_details(username, headers)
-        if user_details:  # Check if the response was successful
-            save_user_details_to_csv(filename, user_details)
+        if user_details:
+            save_user_details_to_airtable(user_details)

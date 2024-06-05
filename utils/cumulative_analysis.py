@@ -1,34 +1,29 @@
-import csv
+import pandas as pd
 from collections import defaultdict
+from utils.airtable import load_data_from_airtable, save_data_to_airtable
 
 def process_accounts():
     # Load target accounts
-    target_accounts = {}
-    with open('target_accounts.csv', mode='r', encoding='utf-8') as file:
-        reader = csv.DictReader(file, delimiter=',')
-        for row in reader:
-            target_accounts[row['username']] = row
+    target_accounts_df = load_data_from_airtable('Accounts')
+    target_accounts = target_accounts_df.set_index('Account ID').to_dict('index')
 
     # Load incremental updates and build the followers list and first appearance timestamp
+    incremental_updates_df = load_data_from_airtable('Incremental Updates')
     followers = defaultdict(list)
     first_appearance = {}
-    with open('incremental_updates_list.csv', mode='r', encoding='utf-8') as file:
-        reader = csv.reader(file, delimiter=',')
-        for row in reader:
-            if len(row) < 3:
-                continue
-            timestamp, username, follower = row[0], row[1], row[2]
-            followers[username].append(follower)
-            if username not in first_appearance:
-                first_appearance[username] = timestamp
 
-    # Write the joined data to a new CSV file
-    with open('joined_accounts.csv', mode='w', newline='', encoding='utf-8') as file:
-        fieldnames = ['id', 'name', 'username', 'created_at', 'description', 'followers_count', 'listed_count', 'followed_by', 'first_appearance']
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
-        writer.writeheader()
+    for _, row in incremental_updates_df.iterrows():
+        timestamp, account_id, followed_by = row['timestamp'], row['account'], row['followed by']
+        followers[account_id].append(followed_by)
+        if account_id not in first_appearance:
+            first_appearance[account_id] = timestamp
 
-        for username, account in target_accounts.items():
-            account['followed_by'] = ', '.join(followers[username])
-            account['first_appearance'] = first_appearance.get(username, 'N/A')
-            writer.writerow(account)
+    # Prepare the joined data
+    joined_data = []
+    for account_id, account in target_accounts.items():
+        account['followed_by'] = followers[account_id]
+        account['first_appearance'] = first_appearance.get(account_id, 'N/A')
+        joined_data.append(account)
+
+    # Save the joined data to Airtable
+    save_data_to_airtable('Joined Accounts', pd.DataFrame(joined_data))

@@ -2,10 +2,8 @@ import pandas as pd
 from pyairtable import Api, formulas
 from pyairtable.formulas import match
 import os
-import numpy as np
-from dotenv import load_dotenv
 import logging
-import json
+from dotenv import load_dotenv
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -25,30 +23,19 @@ logging.info("Airtable API initialized.")
 # Get table instances
 accounts_table = api.table(BASE_ID, 'Accounts')
 followers_table = api.table(BASE_ID, 'Followers')
+incremental_updates_table = api.table(BASE_ID, 'Incremental Updates')
 logging.info("Table instances retrieved.")
 
-def load_csv_files():
-    logging.info("Loading CSV files...")
-    target_accounts_df = pd.read_csv('/root/followfeed/joined_accounts.csv')
-    list_members_df = pd.read_csv('/root/followfeed/list_members.csv')
+def load_data_from_airtable(table_name):
+    table = api.table(BASE_ID, table_name)
+    records = table.all()
+    data = [record['fields'] for record in records]
+    return pd.DataFrame(data)
 
-    username_to_id = dict(zip(list_members_df['Username'], list_members_df['ID']))
-
-    target_accounts_df.replace([np.inf, -np.inf], None, inplace=True)
-    target_accounts_df.where(pd.notnull(target_accounts_df), None, inplace=True)
-
-    logging.info("CSV files loaded.")
-    return target_accounts_df, username_to_id
-
-def load_processed_records(file_path):
-    if os.path.exists(file_path):
-        with open(file_path, 'r') as f:
-            return json.load(f)
-    return {}
-
-def save_processed_records(file_path, data):
-    with open(file_path, 'w') as f:
-        json.dump(data, f)
+def save_data_to_airtable(table_name, data):
+    table = api.table(BASE_ID, table_name)
+    for record in data.to_dict('records'):
+        table.create(record)
 
 def push_followers_to_airtable(df, account_id_to_record_id, username_to_id, processed_records):
     logging.info("Pushing followers data to Airtable...")
@@ -104,6 +91,7 @@ def push_data_to_airtable(df, processed_records):
             'Followers Count': row['followers_count'],
             'Listed Count': row['listed_count'],
             'Created At': row['created_at'],
+            'First Appearance': row['first_appearance'],
         }
         
         formula = match({'Account ID': str(row['id'])})
@@ -118,17 +106,3 @@ def push_data_to_airtable(df, processed_records):
         processed_records[str(row['id'])] = True
     
     return account_id_to_record_id, processed_records
-
-def main():
-    processed_records_file = 'processed_records.json'
-    processed_records = load_processed_records(processed_records_file)
-
-    target_accounts_df, username_to_id = load_csv_files()
-
-    account_id_to_record_id, processed_records = push_data_to_airtable(target_accounts_df, processed_records)
-    processed_records = push_followers_to_airtable(target_accounts_df, account_id_to_record_id, username_to_id, processed_records)
-
-    save_processed_records(processed_records_file, processed_records)
-
-if __name__ == "__main__":
-    main()
