@@ -16,6 +16,10 @@ logging.info("Environment variables loaded.")
 ACCESS_TOKEN = os.getenv('AIRTABLE_TOKEN')
 BASE_ID = os.getenv('AIRTABLE_BASE_ID')
 
+# Ensure the environment variables are not None
+if not ACCESS_TOKEN or not BASE_ID:
+    raise ValueError("Airtable API key and Base ID must be set in environment variables.")
+
 # Initialize Airtable API
 api = Api(ACCESS_TOKEN)
 logging.info("Airtable API initialized.")
@@ -70,6 +74,15 @@ def push_followers_to_airtable(df, account_id_to_record_id, username_to_id, proc
                     }
                     followers_table.create(follower_data)
                     logging.info(f"Created new follower {follower}.")
+
+                # Update the followers field in the accounts table
+                account_record_id = account_id_to_record_id[row['id']]
+                account_record = accounts_table.get(account_record_id)
+                existing_followers = account_record['fields'].get('Followers', [])
+                if follower_id not in existing_followers:
+                    existing_followers.append(follower_id)
+                    accounts_table.update(account_record_id, {'Followers': existing_followers})
+                    logging.info(f"Added follower {follower_id} to account {account_record_id}.")
 
         processed_records[str(row['id'])] = True
 
