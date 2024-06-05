@@ -1,0 +1,710 @@
+{
+  "tables": [
+    {
+      "id": "tblJCXhcrCxDUJR3F",
+      "name": "Accounts",
+      "primaryFieldId": "fldQTZqbhLnvX4J4N",
+      "fields": [
+        {
+          "type": "singleLineText",
+          "id": "fldQTZqbhLnvX4J4N",
+          "name": "Username"
+        },
+        {
+          "type": "singleLineText",
+          "id": "fld6us1NRxWC3pxPl",
+          "name": "Account ID"
+        },
+        {
+          "type": "formula",
+          "options": {
+            "isValid": true,
+            "formula": "\"https://www.x.com/\"&{fldQTZqbhLnvX4J4N}",
+            "referencedFieldIds": ["fldQTZqbhLnvX4J4N"],
+            "result": {
+              "type": "singleLineText"
+            }
+          },
+          "id": "fldFkbN1H0RmngTfd",
+          "name": "Link to Profile"
+        },
+        {
+          "type": "singleLineText",
+          "id": "fldymcou2AR8Ybgcl",
+          "name": "Full Name"
+        },
+        {
+          "type": "multilineText",
+          "id": "fldzG3qnqMraQOE3f",
+          "name": "Description"
+        },
+        {
+          "type": "multipleLookupValues",
+          "options": {
+            "isValid": true,
+            "recordLinkFieldId": "fldFJDtUxHQkNerXE",
+            "fieldIdInLinkedTable": "fldzwVDGrXalAbvp7",
+            "result": {
+              "type": "singleLineText"
+            }
+          },
+          "id": "fldDfCzyyY2SGOaJO",
+          "name": "Follower Users"
+        },
+        {
+          "type": "multipleRecordLinks",
+          "options": {
+            "linkedTableId": "tbl7bEfNVnCEQvUkT",
+            "isReversed": false,
+            "prefersSingleRecordLink": false,
+            "inverseLinkFieldId": "fldGbi3dD2dfUl7Qm"
+          },
+          "id": "fldFJDtUxHQkNerXE",
+          "name": "Followers"
+        },
+        {
+          "type": "number",
+          "options": {
+            "precision": 0
+          },
+          "id": "fldMBcHWW8ku5W5NS",
+          "name": "Listed Count"
+        },
+        {
+          "type": "number",
+          "options": {
+            "precision": 0
+          },
+          "id": "fldKPxZQbZgyRCw2x",
+          "name": "Followers Count"
+        },
+        {
+          "type": "dateTime",
+          "options": {
+            "dateFormat": {
+              "name": "local",
+              "format": "l"
+            },
+            "timeFormat": {
+              "name": "12hour",
+              "format": "h:mma"
+            },
+            "timeZone": "client"
+          },
+          "id": "fldpE5wkrktOYUPkJ",
+          "name": "Created At"
+        },
+        {
+          "type": "lastModifiedTime",
+          "options": {
+            "isValid": true,
+            "referencedFieldIds": [],
+            "result": {
+              "type": "dateTime",
+              "options": {
+                "dateFormat": {
+                  "name": "local",
+                  "format": "l"
+                },
+                "timeFormat": {
+                  "name": "12hour",
+                  "format": "h:mma"
+                },
+                "timeZone": "client"
+              }
+            }
+          },
+          "id": "fldaTA918VgHm2rE1",
+          "name": "Last Modified"
+        },
+        {
+          "type": "rollup",
+          "options": {
+            "isValid": true,
+            "recordLinkFieldId": "fldFJDtUxHQkNerXE",
+            "fieldIdInLinkedTable": "fldn8HytJBk8AMCEA",
+            "referencedFieldIds": [],
+            "result": {
+              "type": "number",
+              "options": {
+                "precision": 0
+              }
+            }
+          },
+          "id": "fldPaeZDu9upaxw0P",
+          "name": "# of Followers"
+        },
+        {
+          "type": "date",
+          "options": {
+            "dateFormat": {
+              "name": "local",
+              "format": "l"
+            }
+          },
+          "id": "fldibrBgMTSF7fbI8",
+          "name": "First Appearance"
+        },
+        {
+          "type": "multipleRecordLinks",
+          "options": {
+            "linkedTableId": "tbl9XyzVimtqIKSW7",
+            "isReversed": false,
+            "prefersSingleRecordLink": false,
+            "inverseLinkFieldId": "fld6zHfUoRD91QjJm"
+          },
+          "id": "fldvzCttrUQJp1CCg",
+          "name": "Joined Accounts"
+        },
+        {
+          "type": "multipleRecordLinks",
+          "options": {
+            "linkedTableId": "tbldJzvV7qiqk9L5J",
+            "isReversed": false,
+            "prefersSingleRecordLink": false,
+            "inverseLinkFieldId": "fld2YfSrGr6ABJg7K"
+          },
+          "id": "fldEPJseFx8UerpaW",
+          "name": "Incremental Updates"
+        }
+      ],
+      "views": [
+        {
+          "id": "viwqq8T0xJgdGyE6g",
+          "name": "Grid view",
+          "type": "grid"
+        }
+      ]
+    },
+    {
+      "id": "tbl7bEfNVnCEQvUkT",
+      "name": "Followers",
+      "primaryFieldId": "fldzwVDGrXalAbvp7",
+      "fields": [
+        {
+          "type": "singleLineText",
+          "id": "fldzwVDGrXalAbvp7",
+          "name": "Username"
+        },
+        {
+          "type": "singleLineText",
+          "id": "fldn8HytJBk8AMCEA",
+          "name": "Account ID"
+        },
+        {
+          "type": "multipleLookupValues",
+          "options": {
+            "isValid": true,
+            "recordLinkFieldId": "fldGbi3dD2dfUl7Qm",
+            "fieldIdInLinkedTable": "fldQTZqbhLnvX4J4N",
+            "result": {
+              "type": "singleLineText"
+            }
+          },
+          "id": "fldMvchjbNC0HeGxm",
+          "name": "Followed Accounts"
+        },
+        {
+          "type": "multilineText",
+          "id": "fldFLzHrEuaiyMlcb",
+          "name": "Description"
+        },
+        {
+          "type": "multipleRecordLinks",
+          "options": {
+            "linkedTableId": "tblJCXhcrCxDUJR3F",
+            "isReversed": false,
+            "prefersSingleRecordLink": false,
+            "inverseLinkFieldId": "fldFJDtUxHQkNerXE"
+          },
+          "id": "fldGbi3dD2dfUl7Qm",
+          "name": "Account"
+        },
+        {
+          "type": "lastModifiedTime",
+          "options": {
+            "isValid": true,
+            "referencedFieldIds": [],
+            "result": {
+              "type": "dateTime",
+              "options": {
+                "dateFormat": {
+                  "name": "local",
+                  "format": "l"
+                },
+                "timeFormat": {
+                  "name": "12hour",
+                  "format": "h:mma"
+                },
+                "timeZone": "client"
+              }
+            }
+          },
+          "id": "fldowdhwycaXnDHIT",
+          "name": "Last Modified"
+        },
+        {
+          "type": "rollup",
+          "options": {
+            "isValid": true,
+            "recordLinkFieldId": "fldGbi3dD2dfUl7Qm",
+            "fieldIdInLinkedTable": "fld6us1NRxWC3pxPl",
+            "referencedFieldIds": [],
+            "result": {
+              "type": "number",
+              "options": {
+                "precision": 0
+              }
+            }
+          },
+          "id": "fldot0xXFNlHXVAZ7",
+          "name": "Number of Followed"
+        },
+        {
+          "type": "multipleRecordLinks",
+          "options": {
+            "linkedTableId": "tbldJzvV7qiqk9L5J",
+            "isReversed": false,
+            "prefersSingleRecordLink": false,
+            "inverseLinkFieldId": "fldjE0GNwusOi03XE"
+          },
+          "id": "fldqS6vroAu4Weo7c",
+          "name": "Incremental Updates"
+        }
+      ],
+      "views": [
+        {
+          "id": "viwtqGAqMoyhF23oN",
+          "name": "Grid view",
+          "type": "grid"
+        }
+      ]
+    },
+    {
+      "id": "tbldJzvV7qiqk9L5J",
+      "name": "Incremental Updates",
+      "primaryFieldId": "fldHZJ1F42WNa7j5s",
+      "fields": [
+        {
+          "type": "autoNumber",
+          "id": "fldHZJ1F42WNa7j5s",
+          "name": "Update"
+        },
+        {
+          "type": "createdTime",
+          "options": {
+            "result": {
+              "type": "dateTime",
+              "options": {
+                "dateFormat": {
+                  "name": "local",
+                  "format": "l"
+                },
+                "timeFormat": {
+                  "name": "12hour",
+                  "format": "h:mma"
+                },
+                "timeZone": "client"
+              }
+            }
+          },
+          "id": "fldsh7HCzvRuS6IdG",
+          "name": "Created"
+        },
+        {
+          "type": "multipleLookupValues",
+          "options": {
+            "isValid": true,
+            "recordLinkFieldId": "fld2YfSrGr6ABJg7K",
+            "fieldIdInLinkedTable": "fldQTZqbhLnvX4J4N",
+            "result": {
+              "type": "singleLineText"
+            }
+          },
+          "id": "fldOYEjWYdloOwOvH",
+          "name": "Username (from Account)"
+        },
+        {
+          "type": "multipleLookupValues",
+          "options": {
+            "isValid": true,
+            "recordLinkFieldId": "fldjE0GNwusOi03XE",
+            "fieldIdInLinkedTable": "fldzwVDGrXalAbvp7",
+            "result": {
+              "type": "singleLineText"
+            }
+          },
+          "id": "fldFyzHTbkIojkA9m",
+          "name": "Username (from Followed By)"
+        },
+        {
+          "type": "singleLineText",
+          "id": "fldMH7Syn06y2BGXm",
+          "name": "Joined Accounts"
+        },
+        {
+          "type": "multipleRecordLinks",
+          "options": {
+            "linkedTableId": "tblJCXhcrCxDUJR3F",
+            "isReversed": false,
+            "prefersSingleRecordLink": false,
+            "inverseLinkFieldId": "fldEPJseFx8UerpaW"
+          },
+          "id": "fld2YfSrGr6ABJg7K",
+          "name": "Account"
+        },
+        {
+          "type": "multipleRecordLinks",
+          "options": {
+            "linkedTableId": "tbl7bEfNVnCEQvUkT",
+            "isReversed": false,
+            "prefersSingleRecordLink": false,
+            "inverseLinkFieldId": "fldqS6vroAu4Weo7c"
+          },
+          "id": "fldjE0GNwusOi03XE",
+          "name": "Followed By"
+        }
+      ],
+      "views": [
+        {
+          "id": "viwjiUm4iUxrgkLlG",
+          "name": "Grid view",
+          "type": "grid"
+        }
+      ]
+    },
+    {
+      "id": "tbl9XyzVimtqIKSW7",
+      "name": "Joined Accounts",
+      "primaryFieldId": "fldnLMfK83oEVNVsO",
+      "fields": [
+        {
+          "type": "autoNumber",
+          "id": "fldnLMfK83oEVNVsO",
+          "name": "Name"
+        },
+        {
+          "type": "multilineText",
+          "id": "fldsGzSxliUFonZ30",
+          "name": "Notes"
+        },
+        {
+          "type": "rollup",
+          "options": {
+            "isValid": true,
+            "recordLinkFieldId": "fld6zHfUoRD91QjJm",
+            "fieldIdInLinkedTable": "fldQTZqbhLnvX4J4N",
+            "referencedFieldIds": [],
+            "result": {
+              "type": "singleLineText"
+            }
+          },
+          "id": "fldpX4RJtL1UvARdz",
+          "name": "Followed_By"
+        },
+        {
+          "type": "multipleRecordLinks",
+          "options": {
+            "linkedTableId": "tblJCXhcrCxDUJR3F",
+            "isReversed": false,
+            "prefersSingleRecordLink": false,
+            "inverseLinkFieldId": "fldvzCttrUQJp1CCg"
+          },
+          "id": "fld6zHfUoRD91QjJm",
+          "name": "Accounts"
+        },
+        {
+          "type": "multipleLookupValues",
+          "options": {
+            "isValid": true,
+            "recordLinkFieldId": "fld6zHfUoRD91QjJm",
+            "fieldIdInLinkedTable": "fld6us1NRxWC3pxPl",
+            "result": {
+              "type": "singleLineText"
+            }
+          },
+          "id": "fld54kGX5ctBdXaVc",
+          "name": "Account ID (from Accounts)"
+        },
+        {
+          "type": "multipleLookupValues",
+          "options": {
+            "isValid": true,
+            "recordLinkFieldId": "fld6zHfUoRD91QjJm",
+            "fieldIdInLinkedTable": "fldQTZqbhLnvX4J4N",
+            "result": {
+              "type": "singleLineText"
+            }
+          },
+          "id": "fldOzY1HOS5pVpfAH",
+          "name": "Username (from Accounts)"
+        },
+        {
+          "type": "multipleLookupValues",
+          "options": {
+            "isValid": true,
+            "recordLinkFieldId": "fld6zHfUoRD91QjJm",
+            "fieldIdInLinkedTable": "fldFkbN1H0RmngTfd",
+            "result": {
+              "type": "singleLineText"
+            }
+          },
+          "id": "fld1OwoMlUyO35GNW",
+          "name": "Link to Profile (from Accounts)"
+        },
+        {
+          "type": "multipleLookupValues",
+          "options": {
+            "isValid": true,
+            "recordLinkFieldId": "fld6zHfUoRD91QjJm",
+            "fieldIdInLinkedTable": "fldymcou2AR8Ybgcl",
+            "result": {
+              "type": "singleLineText"
+            }
+          },
+          "id": "fldQDnZqniX5MN8HJ",
+          "name": "Full Name (from Accounts)"
+        },
+        {
+          "type": "multipleLookupValues",
+          "options": {
+            "isValid": true,
+            "recordLinkFieldId": "fld6zHfUoRD91QjJm",
+            "fieldIdInLinkedTable": "fldzG3qnqMraQOE3f",
+            "result": {
+              "type": "multilineText"
+            }
+          },
+          "id": "fld11zPZ9UNg4KhTk",
+          "name": "Description (from Accounts)"
+        },
+        {
+          "type": "multipleLookupValues",
+          "options": {
+            "isValid": true,
+            "recordLinkFieldId": "fld6zHfUoRD91QjJm",
+            "fieldIdInLinkedTable": "fldMBcHWW8ku5W5NS",
+            "result": {
+              "type": "number",
+              "options": {
+                "precision": 0
+              }
+            }
+          },
+          "id": "fldYNtq5113pUY7QY",
+          "name": "Listed Count (from Accounts)"
+        },
+        {
+          "type": "multipleLookupValues",
+          "options": {
+            "isValid": true,
+            "recordLinkFieldId": "fld6zHfUoRD91QjJm",
+            "fieldIdInLinkedTable": "fldKPxZQbZgyRCw2x",
+            "result": {
+              "type": "number",
+              "options": {
+                "precision": 0
+              }
+            }
+          },
+          "id": "fldroZJfbP8veXJCy",
+          "name": "Followers Count (from Accounts)"
+        },
+        {
+          "type": "multipleLookupValues",
+          "options": {
+            "isValid": true,
+            "recordLinkFieldId": "fld6zHfUoRD91QjJm",
+            "fieldIdInLinkedTable": "fldpE5wkrktOYUPkJ",
+            "result": {
+              "type": "dateTime",
+              "options": {
+                "dateFormat": {
+                  "name": "local",
+                  "format": "l"
+                },
+                "timeFormat": {
+                  "name": "12hour",
+                  "format": "h:mma"
+                },
+                "timeZone": "client"
+              }
+            }
+          },
+          "id": "fldtS9qdoV0HEBQpb",
+          "name": "Created At (from Accounts)"
+        },
+        {
+            "id": "tbl9XyzVimtqIKSW7",
+            "name": "Joined Accounts",
+            "primaryFieldId": "fldnLMfK83oEVNVsO",
+            "fields": [
+              {
+                "type": "autoNumber",
+                "id": "fldnLMfK83oEVNVsO",
+                "name": "Name"
+              },
+              {
+                "type": "multilineText",
+                "id": "fldsGzSxliUFonZ30",
+                "name": "Notes"
+              },
+              {
+                "type": "rollup",
+                "options": {
+                  "isValid": true,
+                  "recordLinkFieldId": "fld6zHfUoRD91QjJm",
+                  "fieldIdInLinkedTable": "fldQTZqbhLnvX4J4N",
+                  "referencedFieldIds": [],
+                  "result": {
+                    "type": "singleLineText"
+                  }
+                },
+                "id": "fldpX4RJtL1UvARdz",
+                "name": "Followed_By"
+              },
+              {
+                "type": "multipleRecordLinks",
+                "options": {
+                  "linkedTableId": "tblJCXhcrCxDUJR3F",
+                  "isReversed": false,
+                  "prefersSingleRecordLink": false,
+                  "inverseLinkFieldId": "fldvzCttrUQJp1CCg"
+                },
+                "id": "fld6zHfUoRD91QjJm",
+                "name": "Accounts"
+              },
+              {
+                "type": "multipleLookupValues",
+                "options": {
+                  "isValid": true,
+                  "recordLinkFieldId": "fld6zHfUoRD91QjJm",
+                  "fieldIdInLinkedTable": "fld6us1NRxWC3pxPl",
+                  "result": {
+                    "type": "singleLineText"
+                  }
+                },
+                "id": "fld54kGX5ctBdXaVc",
+                "name": "Account ID (from Accounts)"
+              },
+              {
+                "type": "multipleLookupValues",
+                "options": {
+                  "isValid": true,
+                  "recordLinkFieldId": "fld6zHfUoRD91QjJm",
+                  "fieldIdInLinkedTable": "fldQTZqbhLnvX4J4N",
+                  "result": {
+                    "type": "singleLineText"
+                  }
+                },
+                "id": "fldOzY1HOS5pVpfAH",
+                "name": "Username (from Accounts)"
+              },
+              {
+                "type": "multipleLookupValues",
+                "options": {
+                  "isValid": true,
+                  "recordLinkFieldId": "fld6zHfUoRD91QjJm",
+                  "fieldIdInLinkedTable": "fldFkbN1H0RmngTfd",
+                  "result": {
+                    "type": "singleLineText"
+                  }
+                },
+                "id": "fld1OwoMlUyO35GNW",
+                "name": "Link to Profile (from Accounts)"
+              },
+              {
+                "type": "multipleLookupValues",
+                "options": {
+                  "isValid": true,
+                  "recordLinkFieldId": "fld6zHfUoRD91QjJm",
+                  "fieldIdInLinkedTable": "fldymcou2AR8Ybgcl",
+                  "result": {
+                    "type": "singleLineText"
+                  }
+                },
+                "id": "fldQDnZqniX5MN8HJ",
+                "name": "Full Name (from Accounts)"
+              },
+              {
+                "type": "multipleLookupValues",
+                "options": {
+                  "isValid": true,
+                  "recordLinkFieldId": "fld6zHfUoRD91QjJm",
+                  "fieldIdInLinkedTable": "fldzG3qnqMraQOE3f",
+                  "result": {
+                    "type": "multilineText"
+                  }
+                },
+                "id": "fld11zPZ9UNg4KhTk",
+                "name": "Description (from Accounts)"
+              },
+              {
+                "type": "multipleLookupValues",
+                "options": {
+                  "isValid": true,
+                  "recordLinkFieldId": "fld6zHfUoRD91QjJm",
+                  "fieldIdInLinkedTable": "fldMBcHWW8ku5W5NS",
+                  "result": {
+                    "type": "number",
+                    "options": {
+                      "precision": 0
+                    }
+                  }
+                },
+                "id": "fldYNtq5113pUY7QY",
+                "name": "Listed Count (from Accounts)"
+              },
+              {
+                "type": "multipleLookupValues",
+                "options": {
+                  "isValid": true,
+                  "recordLinkFieldId": "fld6zHfUoRD91QjJm",
+                  "fieldIdInLinkedTable": "fldKPxZQbZgyRCw2x",
+                  "result": {
+                    "type": "number",
+                    "options": {
+                      "precision": 0
+                    }
+                  }
+                },
+                "id": "fldroZJfbP8veXJCy",
+                "name": "Followers Count (from Accounts)"
+              },
+              {
+                "type": "multipleLookupValues",
+                "options": {
+                  "isValid": true,
+                  "recordLinkFieldId": "fld6zHfUoRD91QjJm",
+                  "fieldIdInLinkedTable": "fldpE5wkrktOYUPkJ",
+                  "result": {
+                    "type": "dateTime",
+                    "options": {
+                      "dateFormat": {
+                        "name": "local",
+                        "format": "l"
+                      },
+                      "timeFormat": {
+                        "name": "12hour",
+                        "format": "h:mma"
+                      },
+                      "timeZone": "client"
+                    }
+                  }
+                },
+                "id": "fldtS9qdoV0HEBQpb",
+                "name": "Created At (from Accounts)"
+              }
+            ],
+            "views": [
+                {
+                    "id": "viwjiUm4iUxrgkLlG",
+                    "name": "Grid view",
+                    "type": "grid"
+                }
+                ]
+            }
+        ]
+    }
+    ]
+}
