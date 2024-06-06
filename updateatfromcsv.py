@@ -66,7 +66,7 @@ def batch_upsert_airtable_records(records):
 
 # Retrieve all records from Airtable
 airtable_records = get_all_airtable_records()
-airtable_records_map = {record['fields'].get('Username'): record['id'] for record in airtable_records}
+airtable_records_map = {record['fields'].get('Username').lower(): record['id'] for record in airtable_records}
 logging.info(f"Retrieved {len(airtable_records)} records from Airtable.")
 
 # Read joined_accounts.csv and prepare records for batch upsert
@@ -76,17 +76,28 @@ with open('joined_accounts.csv', 'r') as csv_file:
     headers = csv_reader.fieldnames
     logging.info(f"CSV Headers: {headers}")  # Debugging line to print headers
     for row in csv_reader:
-        username = row['username']
+        username = row['username'].lower()
         fields = {
-            "Username": username,
             "Description": row['description'],
             "Account ID": row['id'],
             "Full Name": row['name'],
+            "Followers Count": int(row['followers_count']),
+            "Listed Count": int(row['listed_count']),
+            "Created At": row['created_at'],
         }
         record_id = airtable_records_map.get(username)
         if record_id:
             records_to_upsert.append({"id": record_id, "fields": fields})
         else:
+            fields = {
+            "Description": row['description'],
+            "Account ID": row['id'],
+            "Full Name": row['name'],
+            "Followers Count": int(row['followers_count']),
+            "Listed Count": int(row['listed_count']),
+            "Created At": row['created_at'],
+            "Username": row['username']
+            }
             records_to_upsert.append({"fields": fields})
 
         # Perform batch upsert in chunks of 10
