@@ -24,6 +24,8 @@ HEADERS = {
 with open('airtableschema.json', 'r') as schema_file:
     airtable_schema = json.load(schema_file)
 logging.info("Airtable schema loaded.")
+# Function to deduplicate records in joined_accounts.csv
+
 
 # Airtable API URL
 AIRTABLE_API_URL = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/Accounts"
@@ -66,7 +68,6 @@ def batch_upsert_airtable_records(records):
 airtable_records = get_all_airtable_records()
 airtable_records_map = {record['fields'].get('Username'): record['id'] for record in airtable_records}
 logging.info(f"Retrieved {len(airtable_records)} records from Airtable.")
-logging.info(f"Airtable records map: {airtable_records_map}")
 
 # Read joined_accounts.csv and prepare records for batch upsert
 records_to_upsert = []
@@ -86,7 +87,6 @@ with open('joined_accounts.csv', 'r') as csv_file:
         if record_id:
             records_to_upsert.append({"id": record_id, "fields": fields})
         else:
-            logging.info(f"No matching record found for username {username}. Creating new record.")
             records_to_upsert.append({"fields": fields})
 
         # Perform batch upsert in chunks of 10

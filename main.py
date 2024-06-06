@@ -1,17 +1,10 @@
 import logging
 import requests
-import pandas as pd
 from utils.config import load_env_variables
 from utils.logging_setup import setup_logging
-from utils.airtable import save_data_to_airtable
 from twitter.twitter import fetch_list_members
 from scraping.scraping import init_driver, load_cookies, get_following
-from twitter.twitter_account_details import fetch_and_save_accounts
-from utils.cumulative_analysis import process_accounts
 
-def send_file_via_webhook(file_path, webhook_url):
-    with open(file_path, 'rb') as f:
-        return requests.post(webhook_url, files={'file': f})
 
 def fetch_records_from_airtable(table_id, headers):
     base_id = 'appYCZWcmNBXB2uUS'
@@ -34,34 +27,47 @@ def fetch_records_from_airtable(table_id, headers):
             return []
     return records
 
-def patch_airtable_records(records, table_id, headers):
+def update_airtable_records(records, table_id, headers):
     base_id = 'appYCZWcmNBXB2uUS'
     url = f"https://api.airtable.com/v0/{base_id}/{table_id}"
+    
+    # Fetch existing records to verify record IDs
+    existing_records = fetch_records_from_airtable(table_id, headers)
+    existing_record_ids = {record['id'] for record in existing_records}
+    
     for i in range(0, len(records), 10):
         batch = records[i:i+10]
-        response = requests.patch(url, headers=headers, json={"records": batch})
+        
+        # Filter out records with non-existing IDs
+        valid_batch = [record for record in batch if record['id'] in existing_record_ids]
+        
+        if not valid_batch:
+            logging.error(f"No valid records to update in batch: {batch}")
+            continue
+        
+        response = requests.patch(url, headers=headers, json={"records": valid_batch})
         if response.status_code == 200:
-            logging.info(f"Patched {len(batch)} entries in the {table_id} table.")
+            logging.info(f"Updated {len(valid_batch)} entries in the {table_id} table.")
         else:
-            logging.error(f"Failed to patch entries in {table_id} table. Status code: {response.status_code}")
+            logging.error(f"Failed to update entries in {table_id} table. Status code: {response.status_code}")
             logging.error(f"Response content: {response.content}")
 
-def post_airtable_records(records, table_id, headers):
+def create_airtable_records(records, table_id, headers):
     base_id = 'appYCZWcmNBXB2uUS'
     url = f"https://api.airtable.com/v0/{base_id}/{table_id}"
     for i in range(0, len(records), 10):
         batch = records[i:i+10]
         response = requests.post(url, headers=headers, json={"records": batch})
         if response.status_code == 200:
-            logging.info(f"Posted {len(batch)} entries to the {table_id} table.")
+            logging.info(f"Created {len(batch)} entries in the {table_id} table.")
         else:
-            logging.error(f"Failed to post entries to {table_id} table. Status code: {response.status_code}")
+            logging.error(f"Failed to create entries in {table_id} table. Status code: {response.status_code}")
             logging.error(f"Response content: {response.content}")
 
 def fetch_and_update_accounts(usernames, headers, existing_usernames):
-    new_entries = [{"fields": {"Username": username, "Followers": []}} for username in usernames if username not in existing_usernames]
+    new_entries = [{"fields": {"Username": username}} for username in usernames if username not in existing_usernames]
     if new_entries:
-        post_airtable_records(new_entries, 'tblJCXhcrCxDUJR3F', headers)
+        create_airtable_records(new_entries, 'tblJCXhcrCxDUJR3F', headers)
     updated_records = fetch_records_from_airtable('tblJCXhcrCxDUJR3F', headers)
     return {record['fields']['Username']: record['id'] for record in updated_records if 'Username' in record['fields']}
 
@@ -76,39 +82,22 @@ def fetch_existing_follows(record_id, headers):
         logging.error(f"Response content: {response.content}")
         return set()
 
-def update_followers_field(follow_record_id, follower_record_id, headers):
-    base_id = 'appYCZWcmNBXB2uUS'
-    url = f"https://api.airtable.com/v0/{base_id}/tblJCXhcrCxDUJR3F/{follow_record_id}"
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        account_data = response.json().get('fields', {})
-        existing_followers = account_data.get('Followers', [])
-        if follower_record_id not in existing_followers:
-            existing_followers.append(follower_record_id)
-            update_payload = {'fields': {'Followers': existing_followers}}
-            update_response = requests.patch(url, headers=headers, json=update_payload)
-            if update_response.status_code == 200:
-                logging.info(f"Updated followers for account {follow_record_id}")
-            else:
-                logging.error(f"Failed to update followers for account {follow_record_id}. Status code: {update_response.status_code}")
-                logging.error(f"Response content: {update_response.content}")
-    else:
-        logging.error(f"Failed to fetch account data for {follow_record_id}. Status code: {response.status_code}")
-        logging.error(f"Response content: {response.content}")
+def process_user(username, follower_record_id, driver, headers, existing_usernames):
+    existing_follows_usernames = fetch_existing_follows(follower_record_id, headers)
+    new_follows_usernames = get_following(driver, username, existing_follows_usernames)
+    all_follows_usernames = existing_follows_usernames.union(new_follows_usernames)
 
-def process_user(username, follower_record_id, driver, headers, all_updates, existing_usernames, accounts_table):
-    existing_follows = fetch_existing_follows(follower_record_id, headers)
-    new_follows = get_following(driver, username, existing_follows)
-    existing_usernames = fetch_and_update_accounts(new_follows, headers, existing_usernames)
+    existing_usernames = fetch_and_update_accounts(all_follows_usernames, headers, existing_usernames)
 
-    for follow_username in new_follows:
-        follow_record_id = existing_usernames.get(follow_username)
-        if follow_record_id:
-            update = {'Account': [follow_record_id], 'Followed By': [follower_record_id]}
-            all_updates.append(update)
-            update_followers_field(follow_record_id, follower_record_id, headers)
-        else:
-            logging.error(f"Record ID for followed account {follow_username} not found.")
+    # Map the followed usernames to their record IDs
+    followed_account_ids = [existing_usernames[username] for username in all_follows_usernames if username in existing_usernames]
+
+    # Update Follower's "Account" field with the full list of account record IDs they follow
+    follower_update = {
+        'id': follower_record_id,
+        'fields': {'Account': followed_account_ids}
+    }
+    update_airtable_records([follower_update], 'tbl7bEfNVnCEQvUkT', headers)
 
 def main():
     env_vars = load_env_variables()
@@ -124,7 +113,7 @@ def main():
     existing_followers = fetch_records_from_airtable('tbl7bEfNVnCEQvUkT', headers)
     existing_usernames = {record['fields']['Username']: record['id'] for record in existing_followers if 'Username' in record['fields']}
     new_followers = [{"fields": {"Account ID": member['id'], "Username": member['username']}} for member in list_members if member['username'] not in existing_usernames]
-    post_airtable_records(new_followers, 'tbl7bEfNVnCEQvUkT', headers)
+    create_airtable_records(new_followers, 'tbl7bEfNVnCEQvUkT', headers)
     updated_followers = fetch_records_from_airtable('tbl7bEfNVnCEQvUkT', headers)
     existing_usernames.update({record['fields']['Username']: record['id'] for record in updated_followers if 'Username' in record['fields']})
     existing_accounts = fetch_records_from_airtable('tblJCXhcrCxDUJR3F', headers)
@@ -133,24 +122,17 @@ def main():
     driver = init_driver()
     load_cookies(driver, env_vars['cookie_path'])
 
-    all_updates = []
-    accounts_table = {record['id']: record for record in existing_accounts}
-
     for member in list_members:
         username = member['username']
         record_id = existing_usernames.get(username)
         if record_id:
             try:
-                process_user(username, record_id, driver, headers, all_updates, existing_usernames, accounts_table)
+                process_user(username, record_id, driver, headers, existing_usernames)
             except Exception as e:
                 logging.error(f"Error processing {username}: {e}")
 
-    fetch_and_save_accounts({update['Account'][0] for update in all_updates}, headers)
     driver.quit()
-    process_accounts()
 
-    response = send_file_via_webhook('joined_accounts.csv', 'https://hooks.zapier.com/hooks/catch/14552359/3v03fym/')
-    logging.info("File sent successfully." if response.status_code == 200 else f"Failed to send file. Status code: {response.status_code}")
 
 if __name__ == "__main__":
     main()
