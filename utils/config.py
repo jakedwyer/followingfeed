@@ -1,10 +1,12 @@
 import os
 from dotenv import load_dotenv
+import logging
 
 def load_env_variables():
-    print(f"Current working directory: {os.getcwd()}")
+    logging.info(f"Current working directory: {os.getcwd()}")
+    
     load_dotenv()
-    print("Environment variables loaded from .env file")
+    logging.info("Environment variables loaded from .env file")
     env_vars = {
         'bearer_token': os.getenv('BEARER_TOKEN'),
         'consumer_key': os.getenv('CONSUMER_KEY'),
