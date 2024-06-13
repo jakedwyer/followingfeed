@@ -84,7 +84,8 @@ def get_following(driver, handle, existing_follows, max_accounts=None):
                 for el in elements
                 if "/following" not in el.get_attribute("href")
                 and "search?q=%23" not in el.get_attribute("href")
-                and "search?q=%24" not in el.get_attribute("href")  # Exclude cashtag searches
+                and "search?q=%24" not in el.get_attribute("href")
+                and el.get_attribute("href").startswith("https://x.com/")  # Add this condition # Exclude cashtag searches
             }
 
             new_handles = current_handles.difference(extracted_handles)
