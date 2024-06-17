@@ -1,7 +1,8 @@
+from wsgiref import headers
 import requests
 import logging
 import pandas as pd
-from utils.airtable import save_data_to_airtable
+from utils.airtable import fetch_records_from_airtable, update_airtable_records
 
 def get_user_details(username, headers):
     """Fetch detailed information of a specific Twitter user, handling rate limits."""
@@ -33,7 +34,7 @@ def save_user_details_to_airtable(user_details):
         'Followers Count': user_details['data']['public_metrics']['followers_count'],
         'Listed Count': user_details['data']['public_metrics']['listed_count']
     }
-    save_data_to_airtable('Accounts', pd.DataFrame([user_data]))
+    update_airtable_records([user_data], 'tblJCXhcrCxDUJR3F', headers)
 
 def fetch_and_save_accounts(usernames, headers):
     for username in usernames:

@@ -47,3 +47,9 @@ def update_followers_field(follow_record_id, follower_record_id, headers):
             existing_followers.append(follower_record_id)
             update_payload = {'fields': {'Followers': existing_followers}}
             airtable_api_request('PATCH', 'tblJCXhcrCxDUJR3F', headers, data=update_payload, record_id=follow_record_id)
+
+def update_airtable_records(records, table_id, headers):
+    for i in range(0, len(records), 10):
+        batch = records[i:i+10]
+        airtable_api_request('PATCH', table_id, headers, data={"records": batch})
+        
