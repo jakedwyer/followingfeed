@@ -30,7 +30,7 @@ gh-actions-deploy-key
 gh-actions-deploy-key.pub
 encrypt_sync.sh
 *.code-workspace
-/dev
+/dev/
 output.zip
 github_rsa
 github_rsa.pub
@@ -38,3 +38,5 @@ github_rsa_single_line.txt
 /screenshots
 push_to_git.sh
 .replit
+/output/
+/archive/

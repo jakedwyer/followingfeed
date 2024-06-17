@@ -1,9 +1,20 @@
 import logging
+import os
 import requests
 from utils.config import load_env_variables
 from utils.logging_setup import setup_logging
 from twitter.twitter import fetch_list_members
 from scraping.scraping import init_driver, load_cookies, get_following
+from twitter_update import (
+    airtable_api_request, fetch_records_with_empty_account_id, 
+    update_airtable_records, delete_airtable_record, get_user_details
+)
+def activate_virtualenv():
+    """Activate the virtual environment if not already activated."""
+    venv_path = '/root/followfeed/xfeed/bin/activate_this.py'
+    if not os.getenv('VIRTUAL_ENV') and os.path.exists(venv_path):
+        with open(venv_path) as f:
+            exec(f.read(), {'__file__': venv_path})
 
 # Fetch records from Airtable
 def fetch_records(table_id, headers):
@@ -74,7 +85,6 @@ def process_user(username, follower_record_id, driver, headers, accounts):
     existing_follows = fetch_existing_follows(follower_record_id, headers)
     new_follows = get_following(driver, username, existing_follows)
     all_follows = {uname.lower() for uname in existing_follows.union(new_follows)}
-
     accounts = fetch_and_update_accounts(all_follows, headers, accounts)
     followed_account_ids = [accounts[uname] for uname in all_follows if uname in accounts]
 
@@ -84,10 +94,13 @@ def process_user(username, follower_record_id, driver, headers, accounts):
     }
     update_records([follower_update], 'tbl7bEfNVnCEQvUkT', headers)
 
+    return accounts
+
 # Main function
 def main():
+    activate_virtualenv()
     env_vars = load_env_variables()
-    setup_logging()
+    setup_logging()  # Set up logging to app.log
     headers = {"Authorization": f"Bearer {env_vars['airtable_token']}"}
     twitter_headers = {"Authorization": f"Bearer {env_vars['bearer_token']}"}
 
@@ -107,7 +120,6 @@ def main():
 
     existing_accounts = fetch_records('tblJCXhcrCxDUJR3F', headers)
     accounts = {record['fields']['Username'].lower(): record['id'] for record in existing_accounts if 'Username' in record['fields']}
-
     driver = init_driver()
     load_cookies(driver, env_vars['cookie_path'])
 
@@ -116,11 +128,44 @@ def main():
         record_id = followers.get(username)
         if record_id:
             try:
-                process_user(username, record_id, driver, headers, accounts)
+                accounts = process_user(username, record_id, driver, headers, accounts)
             except Exception as e:
                 logging.error(f"Error processing {username}: {e}")
 
     driver.quit()
+    max_requests = 500
+    request_count = 0
+
+    # Fetch records from Airtable with empty Account ID
+    records = fetch_records_with_empty_account_id('tblJCXhcrCxDUJR3F', headers)
+    logging.info(f"Fetched {len(records)} records with empty Account ID from Airtable.")
+
+    # Fetch user details from Twitter and update records
+    for record in records:
+        if request_count >= max_requests:
+            logging.info("Reached the maximum number of requests to Twitter API. Stopping the script.")
+            break
+
+        username = record['fields'].get('Username')
+        if username:
+            try:
+                user_details = get_user_details(username, twitter_headers)
+                request_count += 1
+
+                if user_details and 'data' in user_details:
+                    record['fields']['Account ID'] = user_details['data']['id']
+                    update_airtable_records([record], 'tblJCXhcrCxDUJR3F', headers)
+                    logging.info(f"Updated record for {username} in Airtable.")
+                else:
+                    logging.error(f"Failed to fetch user details or missing 'data' key for {username}")
+                    logging.error(f"User details response: {user_details}")
+                    delete_airtable_record(record['id'], 'tblJCXhcrCxDUJR3F', headers)
+                    logging.info(f"Deleted record for {username} from Airtable.")
+            except Exception as e:
+                logging.error(f"Stopping script due to error: {e}")
+                break
+        else:
+            logging.error(f"Username not found in record: {record}")
 
 if __name__ == "__main__":
     main()
