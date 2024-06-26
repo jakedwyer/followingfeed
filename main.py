@@ -9,6 +9,9 @@ from twitter_update import (
     airtable_api_request, fetch_records_with_empty_account_id, 
     update_airtable_records, delete_airtable_record, get_user_details
 )
+
+setup_logging()  # Set up logging to app.log
+
 def activate_virtualenv():
     """Activate the virtual environment if not already activated."""
     venv_path = '/root/followfeed/xfeed/bin/activate_this.py'
@@ -94,13 +97,13 @@ def process_user(username, follower_record_id, driver, headers, accounts):
     }
     update_records([follower_update], 'tbl7bEfNVnCEQvUkT', headers)
 
-    return accounts
+    return accounts, len(new_follows)
 
 # Main function
 def main():
     activate_virtualenv()
     env_vars = load_env_variables()
-    setup_logging()  # Set up logging to app.log
+    logging.info("Main function started")
     headers = {"Authorization": f"Bearer {env_vars['airtable_token']}"}
     twitter_headers = {"Authorization": f"Bearer {env_vars['bearer_token']}"}
 
@@ -123,16 +126,20 @@ def main():
     driver = init_driver()
     load_cookies(driver, env_vars['cookie_path'])
 
+    total_new_handles = 0
     for member in list_members:
         username = member['username'].lower()
         record_id = followers.get(username)
         if record_id:
             try:
-                accounts = process_user(username, record_id, driver, headers, accounts)
+                accounts, new_handles = process_user(username, record_id, driver, headers, accounts)
+                total_new_handles += new_handles
             except Exception as e:
                 logging.error(f"Error processing {username}: {e}")
 
     driver.quit()
+    logging.info(f"Total new handles found: {total_new_handles}")
+
     max_requests = 500
     request_count = 0
 
