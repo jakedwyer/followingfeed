@@ -40,3 +40,5 @@ push_to_git.sh
 .replit
 /output/
 /archive/
+config.yaml
+app.log.1
