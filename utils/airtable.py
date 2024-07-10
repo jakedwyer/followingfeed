@@ -15,6 +15,9 @@ def airtable_api_request(method, table_id, headers, data=None, record_id=None, p
     else:
         logging.error(f"Failed to {method} records in {table_id}. Status code: {response.status_code}")
         logging.error(f"Response content: {response.content}")
+        logging.error(f"Request URL: {url}")
+        logging.error(f"Request headers: {headers}")
+        logging.error(f"Request data: {data}")
         return None
 
 def fetch_records_from_airtable(table_id, headers):
@@ -51,5 +54,9 @@ def update_followers_field(follow_record_id, follower_record_id, headers):
 def update_airtable_records(records, table_id, headers):
     for i in range(0, len(records), 10):
         batch = records[i:i+10]
-        airtable_api_request('PATCH', table_id, headers, data={"records": batch})
-        
+        formatted_records = [{"id": record["id"], "fields": record["fields"]} for record in batch]
+        response = airtable_api_request('PATCH', table_id, headers, data={"records": formatted_records})
+        if response is None:
+            logging.error(f"Failed to update batch {i//10 + 1}")
+        else:
+            logging.info(f"Successfully updated batch {i//10 + 1}")

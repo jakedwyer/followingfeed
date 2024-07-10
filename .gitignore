@@ -42,3 +42,4 @@ push_to_git.sh
 /archive/
 config.yaml
 app.log.1
+user_details.json
