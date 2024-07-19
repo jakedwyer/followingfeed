@@ -1,5 +1,7 @@
 import requests
 import logging
+from typing import Dict, List, Optional, Any
+
 
 def fetch_list_members(list_id, headers):
     url = f"https://api.twitter.com/2/lists/{list_id}/members"
@@ -26,3 +28,18 @@ def fetch_list_members(list_id, headers):
             break
 
     return members
+
+def fetch_twitter_data_api(username: str, bearer_token: str) -> Optional[Dict[str, Any]]:
+    url = f"https://api.twitter.com/2/users/by/username/{username}"
+    headers = {
+        "Authorization": f"Bearer {bearer_token}",
+        "User-Agent": "TwitterDevSampleCode"
+    }
+    params = {"user.fields": "id,name,username,created_at,description,public_metrics"}
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        return response.json().get('data')
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error fetching data from Twitter API for {username}: {e}")
+        return None

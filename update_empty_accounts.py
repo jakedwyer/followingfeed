@@ -104,22 +104,38 @@ def update_twitter_data(existing_data: Dict[str, Any], unenriched_accounts: List
 def prepare_update_record(record_id: str, username: str, data: Dict[str, Any]) -> Optional[UpdateRecordDict]:
     try:
         twitter_data = data['data']
-        return {
-            'id': record_id,
-            'fields': {
-                'Account ID': twitter_data['id'],
-                'Full Name': twitter_data['name'],
-                'Description': twitter_data.get('description', ''),
-                'Listed Count': twitter_data['public_metrics']['listed_count'],
-                'Followers Count': twitter_data['public_metrics']['followers_count'],
-                'Created At': twitter_data['created_at']
+        fields = {}
+        
+        if 'id' in twitter_data:
+            fields['Account ID'] = twitter_data['id']
+        if 'name' in twitter_data:
+            fields['Full Name'] = twitter_data['name']
+        if 'description' in twitter_data:
+            fields['Description'] = twitter_data['description']
+        if 'public_metrics' in twitter_data:
+            metrics = twitter_data['public_metrics']
+            if 'listed_count' in metrics:
+                fields['Listed Count'] = metrics['listed_count']
+            if 'followers_count' in metrics:
+                fields['Followers Count'] = metrics['followers_count']
+        if 'created_at' in twitter_data:
+            fields['Created At'] = twitter_data['created_at']
+        
+        if fields:  # Only return an update if there's at least one field to update
+            return {
+                'id': record_id,
+                'fields': fields
             }
-        }
+        else:
+            logging.warning(f"No valid fields found for {username}")
+            return None
     except KeyError as e:
         logging.error(f"Missing key in data for {username}: {e}")
     except Exception as e:
         logging.error(f"Unexpected error preparing record for {username}: {str(e)}")
     return None
+
+# ... rest of the code remains the same ...
 
 def update_airtable(records_to_update: List[Tuple[str, str, Dict[str, Any]]]) -> None:
     batches = [records_to_update[i:i + AIRTABLE_BATCH_SIZE] for i in range(0, len(records_to_update), AIRTABLE_BATCH_SIZE)]
