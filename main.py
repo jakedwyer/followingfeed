@@ -1,28 +1,47 @@
 import logging
 import os
+import sys
+import fcntl
 import requests
+from typing import Dict, List, Set
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+
 from utils.config import load_env_variables
 from utils.logging_setup import setup_logging
-from twitter.twitter import fetch_list_members
+from twitter.twitter import fetch_list_members, fetch_twitter_data_api
 from scraping.scraping import init_driver, load_cookies, get_following
-from twitter_update import (
-    airtable_api_request, fetch_records_with_empty_account_id, 
-    update_airtable_records, delete_airtable_record, get_user_details
-)
+from scrape_empty_accounts import main as scrape_empty_accounts_main
 
-setup_logging()  # Set up logging to app.log
+# Global constants
+BASE_ID = 'appYCZWcmNBXB2uUS'
+LOCK_FILE = '/tmp/your_script_lock'
+VENV_PATH = '/root/followfeed/xfeed/bin/activate_this.py'
+
+def acquire_lock():
+    global lock_fd
+    lock_fd = open(LOCK_FILE, 'w')
+    try:
+        fcntl.lockf(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except IOError:
+        logging.error("Another instance is already running. Exiting.")
+        sys.exit(1)
+
+def release_lock():
+    global lock_fd
+    fcntl.lockf(lock_fd, fcntl.LOCK_UN)
+    lock_fd.close()
 
 def activate_virtualenv():
     """Activate the virtual environment if not already activated."""
-    venv_path = '/root/followfeed/xfeed/bin/activate_this.py'
-    if not os.getenv('VIRTUAL_ENV') and os.path.exists(venv_path):
-        with open(venv_path) as f:
-            exec(f.read(), {'__file__': venv_path})
+    if not os.getenv('VIRTUAL_ENV') and os.path.exists(VENV_PATH):
+        with open(VENV_PATH) as f:
+            exec(f.read(), {'__file__': VENV_PATH})
 
-# Fetch records from Airtable
-def fetch_records(table_id, headers):
-    base_id = 'appYCZWcmNBXB2uUS'
-    url = f"https://api.airtable.com/v0/{base_id}/{table_id}"
+def fetch_records(table_id: str, headers: Dict[str, str]) -> List[Dict]:
+    url = f"https://api.airtable.com/v0/{BASE_ID}/{table_id}"
     records, offset = [], None
     while True:
         params = {'offset': offset} if offset else {}
@@ -30,8 +49,7 @@ def fetch_records(table_id, headers):
         if response.status_code == 200:
             data = response.json()
             records.extend(data.get('records', []))
-            offset = data.get('offset')
-            if not offset:
+            if not (offset := data.get('offset')):
                 break
         else:
             logging.error(f"Failed to fetch records from {table_id}. Status code: {response.status_code}")
@@ -39,8 +57,7 @@ def fetch_records(table_id, headers):
             return []
     return records
 
-# Batch request for creating or updating records
-def batch_request(url, headers, records, method):
+def batch_request(url: str, headers: Dict[str, str], records: List[Dict], method):
     for i in range(0, len(records), 10):
         batch = records[i:i+10]
         response = method(url, headers=headers, json={"records": batch})
@@ -50,20 +67,15 @@ def batch_request(url, headers, records, method):
             logging.error(f"Failed to {method.__name__} entries in {url.split('/')[-1]} table. Status code: {response.status_code}")
             logging.error(f"Response content: {response.content}")
 
-# Update records in Airtable
-def update_records(records, table_id, headers):
-    base_id = 'appYCZWcmNBXB2uUS'
-    url = f"https://api.airtable.com/v0/{base_id}/{table_id}"
+def update_records(records: List[Dict], table_id: str, headers: Dict[str, str]):
+    url = f"https://api.airtable.com/v0/{BASE_ID}/{table_id}"
     batch_request(url, headers, records, requests.patch)
 
-# Create records in Airtable
-def create_records(records, table_id, headers):
-    base_id = 'appYCZWcmNBXB2uUS'
-    url = f"https://api.airtable.com/v0/{base_id}/{table_id}"
+def create_records(records: List[Dict], table_id: str, headers: Dict[str, str]):
+    url = f"https://api.airtable.com/v0/{BASE_ID}/{table_id}"
     batch_request(url, headers, records, requests.post)
 
-# Fetch and update accounts in Airtable
-def fetch_and_update_accounts(usernames, headers, accounts):
+def fetch_and_update_accounts(usernames: Set[str], headers: Dict[str, str], accounts: Dict[str, str]) -> Dict[str, str]:
     new_entries = [{"fields": {"Username": username}} for username in usernames if username not in accounts]
     if new_entries:
         create_records(new_entries, 'tblJCXhcrCxDUJR3F', headers)
@@ -71,10 +83,8 @@ def fetch_and_update_accounts(usernames, headers, accounts):
         accounts.update({record['fields']['Username'].lower(): record['id'] for record in updated_records if 'Username' in record['fields']})
     return accounts
 
-# Fetch existing followed accounts for a follower
-def fetch_existing_follows(record_id, headers):
-    base_id = 'appYCZWcmNBXB2uUS'
-    url = f"https://api.airtable.com/v0/{base_id}/tbl7bEfNVnCEQvUkT/{record_id}"
+def fetch_existing_follows(record_id: str, headers: Dict[str, str]) -> Set[str]:
+    url = f"https://api.airtable.com/v0/{BASE_ID}/tbl7bEfNVnCEQvUkT/{record_id}"
     response = requests.get(url, headers=headers)
     if response.status_code == 200:
         return set(response.json().get('fields', {}).get('Followed Accounts', []))
@@ -83,8 +93,7 @@ def fetch_existing_follows(record_id, headers):
         logging.error(f"Response content: {response.content}")
         return set()
 
-# Process a single user
-def process_user(username, follower_record_id, driver, headers, accounts):
+def process_user(username: str, follower_record_id: str, driver: webdriver.Chrome, headers: Dict[str, str], accounts: Dict[str, str]) -> tuple[Dict[str, str], int]:
     existing_follows = fetch_existing_follows(follower_record_id, headers)
     new_follows = get_following(driver, username, existing_follows)
     all_follows = {uname.lower() for uname in existing_follows.union(new_follows)}
@@ -99,80 +108,65 @@ def process_user(username, follower_record_id, driver, headers, accounts):
 
     return accounts, len(new_follows)
 
-# Main function
 def main():
-    activate_virtualenv()
-    env_vars = load_env_variables()
-    logging.info("Main function started")
-    headers = {"Authorization": f"Bearer {env_vars['airtable_token']}"}
-    twitter_headers = {"Authorization": f"Bearer {env_vars['bearer_token']}"}
+    acquire_lock()
+    try:
+        activate_virtualenv()
+        env_vars = load_env_variables()
+        setup_logging()
+        logging.info("Main function started")
+        headers = {"Authorization": f"Bearer {env_vars['airtable_token']}"}
+        twitter_headers = {"Authorization": f"Bearer {env_vars['bearer_token']}"}
 
-    list_members = fetch_list_members(env_vars['list_id'], twitter_headers)
-    if not list_members:
-        logging.error("Failed to fetch list members.")
-        return
+        list_members = fetch_list_members(env_vars['list_id'], twitter_headers)
+        if not list_members:
+            logging.error("Failed to fetch list members.")
+            return
 
-    existing_followers = fetch_records('tbl7bEfNVnCEQvUkT', headers)
-    followers = {record['fields']['Username'].lower(): record['id'] for record in existing_followers if 'Username' in record['fields']}
+        existing_followers = fetch_records('tbl7bEfNVnCEQvUkT', headers)
+        followers = {record['fields']['Username'].lower(): record['id'] for record in existing_followers if 'Username' in record['fields']}
 
-    new_followers = [{"fields": {"Account ID": member['id'], "Username": member['username']}} for member in list_members if member['username'].lower() not in followers]
-    create_records(new_followers, 'tbl7bEfNVnCEQvUkT', headers)
+        new_followers = [{"fields": {"Account ID": member['id'], "Username": member['username']}} for member in list_members if member['username'].lower() not in followers]
+        create_records(new_followers, 'tbl7bEfNVnCEQvUkT', headers)
 
-    updated_followers = fetch_records('tbl7bEfNVnCEQvUkT', headers)
-    followers.update({record['fields']['Username'].lower(): record['id'] for record in updated_followers if 'Username' in record['fields']})
+        updated_followers = fetch_records('tbl7bEfNVnCEQvUkT', headers)
+        followers.update({record['fields']['Username'].lower(): record['id'] for record in updated_followers if 'Username' in record['fields']})
 
-    existing_accounts = fetch_records('tblJCXhcrCxDUJR3F', headers)
-    accounts = {record['fields']['Username'].lower(): record['id'] for record in existing_accounts if 'Username' in record['fields']}
-    driver = init_driver()
-    load_cookies(driver, env_vars['cookie_path'])
+        existing_accounts = fetch_records('tblJCXhcrCxDUJR3F', headers)
+        accounts = {record['fields']['Username'].lower(): record['id'] for record in existing_accounts if 'Username' in record['fields']}
+        
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
 
-    total_new_handles = 0
-    for member in list_members:
-        username = member['username'].lower()
-        record_id = followers.get(username)
-        if record_id:
-            try:
-                accounts, new_handles = process_user(username, record_id, driver, headers, accounts)
-                total_new_handles += new_handles
-            except Exception as e:
-                logging.error(f"Error processing {username}: {e}")
+        try:
+            service = Service(ChromeDriverManager().install())
+        except Exception as e:
+            logging.error(f"Failed to set up Chrome WebDriver: {str(e)}")
+            raise
 
-    driver.quit()
-    logging.info(f"Total new handles found: {total_new_handles}")
+        with webdriver.Chrome(service=service, options=chrome_options) as driver:
+            if env_vars['cookie_path'] is not None:
+                load_cookies(driver, env_vars['cookie_path'])
+            else:
+                logging.warning("Cookie path is None, skipping load_cookies.")
 
-    max_requests = 500
-    request_count = 0
+            total_new_handles = 0
+            for member in list_members:
+                username = member['username'].lower()
+                if record_id := followers.get(username):
+                    try:
+                        accounts, new_handles = process_user(username, record_id, driver, headers, accounts)
+                        total_new_handles += new_handles
+                    except Exception as e:
+                        logging.error(f"Error processing {username}: {e}")
 
-    # Fetch records from Airtable with empty Account ID
-    records = fetch_records_with_empty_account_id('tblJCXhcrCxDUJR3F', headers)
-    logging.info(f"Fetched {len(records)} records with empty Account ID from Airtable.")
+            logging.info(f"Total new handles found: {total_new_handles}")
+            scrape_empty_accounts_main()
 
-    # Fetch user details from Twitter and update records
-    for record in records:
-        if request_count >= max_requests:
-            logging.info("Reached the maximum number of requests to Twitter API. Stopping the script.")
-            break
-
-        username = record['fields'].get('Username')
-        if username:
-            try:
-                user_details = get_user_details(username, twitter_headers)
-                request_count += 1
-
-                if user_details and 'data' in user_details:
-                    record['fields']['Account ID'] = user_details['data']['id']
-                    update_airtable_records([record], 'tblJCXhcrCxDUJR3F', headers)
-                    logging.info(f"Updated record for {username} in Airtable.")
-                else:
-                    logging.error(f"Failed to fetch user details or missing 'data' key for {username}")
-                    logging.error(f"User details response: {user_details}")
-                    delete_airtable_record(record['id'], 'tblJCXhcrCxDUJR3F', headers)
-                    logging.info(f"Deleted record for {username} from Airtable.")
-            except Exception as e:
-                logging.error(f"Stopping script due to error: {e}")
-                break
-        else:
-            logging.error(f"Username not found in record: {record}")
+    finally:
+        release_lock()
 
 if __name__ == "__main__":
     main()
