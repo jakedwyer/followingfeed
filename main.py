@@ -8,7 +8,12 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
-
+from utils.airtable import (
+    fetch_records_from_airtable,
+    post_airtable_records,
+    update_airtable_records,
+    update_followers_field
+)
 from utils.config import load_env_variables
 from utils.logging_setup import setup_logging
 from twitter.twitter import fetch_list_members, fetch_twitter_data_api
@@ -40,22 +45,6 @@ def activate_virtualenv():
         with open(VENV_PATH) as f:
             exec(f.read(), {'__file__': VENV_PATH})
 
-def fetch_records(table_id: str, headers: Dict[str, str]) -> List[Dict]:
-    url = f"https://api.airtable.com/v0/{BASE_ID}/{table_id}"
-    records, offset = [], None
-    while True:
-        params = {'offset': offset} if offset else {}
-        response = requests.get(url, headers=headers, params=params)
-        if response.status_code == 200:
-            data = response.json()
-            records.extend(data.get('records', []))
-            if not (offset := data.get('offset')):
-                break
-        else:
-            logging.error(f"Failed to fetch records from {table_id}. Status code: {response.status_code}")
-            logging.error(f"Response content: {response.content}")
-            return []
-    return records
 
 def batch_request(url: str, headers: Dict[str, str], records: List[Dict], method):
     for i in range(0, len(records), 10):
@@ -67,19 +56,11 @@ def batch_request(url: str, headers: Dict[str, str], records: List[Dict], method
             logging.error(f"Failed to {method.__name__} entries in {url.split('/')[-1]} table. Status code: {response.status_code}")
             logging.error(f"Response content: {response.content}")
 
-def update_records(records: List[Dict], table_id: str, headers: Dict[str, str]):
-    url = f"https://api.airtable.com/v0/{BASE_ID}/{table_id}"
-    batch_request(url, headers, records, requests.patch)
-
-def create_records(records: List[Dict], table_id: str, headers: Dict[str, str]):
-    url = f"https://api.airtable.com/v0/{BASE_ID}/{table_id}"
-    batch_request(url, headers, records, requests.post)
-
 def fetch_and_update_accounts(usernames: Set[str], headers: Dict[str, str], accounts: Dict[str, str]) -> Dict[str, str]:
     new_entries = [{"fields": {"Username": username}} for username in usernames if username not in accounts]
     if new_entries:
-        create_records(new_entries, 'tblJCXhcrCxDUJR3F', headers)
-        updated_records = fetch_records('tblJCXhcrCxDUJR3F', headers)
+        post_airtable_records(new_entries, 'tblJCXhcrCxDUJR3F', headers)
+        updated_records = fetch_records_from_airtable('tblJCXhcrCxDUJR3F', headers)
         accounts.update({record['fields']['Username'].lower(): record['id'] for record in updated_records if 'Username' in record['fields']})
     return accounts
 
@@ -104,7 +85,11 @@ def process_user(username: str, follower_record_id: str, driver: webdriver.Chrom
         'id': follower_record_id,
         'fields': {'Account': followed_account_ids}
     }
-    update_records([follower_update], 'tbl7bEfNVnCEQvUkT', headers)
+    update_airtable_records([follower_update], 'tbl7bEfNVnCEQvUkT', headers)
+
+    # Update the Followers field for each followed account
+    for account_id in followed_account_ids:
+        update_followers_field(account_id, follower_record_id, headers)
 
     return accounts, len(new_follows)
 
@@ -123,16 +108,14 @@ def main():
             logging.error("Failed to fetch list members.")
             return
 
-        existing_followers = fetch_records('tbl7bEfNVnCEQvUkT', headers)
+        existing_followers = fetch_records_from_airtable('tbl7bEfNVnCEQvUkT', headers)
         followers = {record['fields']['Username'].lower(): record['id'] for record in existing_followers if 'Username' in record['fields']}
 
         new_followers = [{"fields": {"Account ID": member['id'], "Username": member['username']}} for member in list_members if member['username'].lower() not in followers]
-        create_records(new_followers, 'tbl7bEfNVnCEQvUkT', headers)
-
-        updated_followers = fetch_records('tbl7bEfNVnCEQvUkT', headers)
+        post_airtable_records(new_followers, 'tbl7bEfNVnCEQvUkT', headers)
+        updated_followers = fetch_records_from_airtable('tbl7bEfNVnCEQvUkT', headers)
+        existing_accounts = fetch_records_from_airtable('tblJCXhcrCxDUJR3F', headers)        
         followers.update({record['fields']['Username'].lower(): record['id'] for record in updated_followers if 'Username' in record['fields']})
-
-        existing_accounts = fetch_records('tblJCXhcrCxDUJR3F', headers)
         accounts = {record['fields']['Username'].lower(): record['id'] for record in existing_accounts if 'Username' in record['fields']}
         
         chrome_options = Options()

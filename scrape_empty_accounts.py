@@ -5,7 +5,6 @@ import requests
 import logging
 from typing import Dict, List, Tuple, Optional, Any, TypedDict
 from datetime import datetime
-from twitter.twitter import fetch_twitter_data_api  # Make sure this line is present
 from pyairtable import Api
 from scraping.scraping import init_driver, load_cookies, update_twitter_data
 
