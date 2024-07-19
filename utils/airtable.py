@@ -2,6 +2,10 @@ import logging
 import requests
 
 BASE_ID = 'appYCZWcmNBXB2uUS'
+import logging
+import requests
+
+BASE_ID = 'appYCZWcmNBXB2uUS'
 
 def airtable_api_request(method, table_id, headers, data=None, record_id=None, params=None):
     url = f"https://api.airtable.com/v0/{BASE_ID}/{table_id}"

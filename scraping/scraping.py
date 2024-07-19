@@ -148,11 +148,12 @@ def get_following(driver: webdriver.Chrome, handle: str, existing_follows: set, 
                 By.XPATH, "//div[@aria-label='Timeline: Following']//a[contains(@href, '/')]"
             )
             current_handles = {
-                el.get_attribute("href").split("/")[-1]
+                href.split("/")[-1]
                 for el in elements
-                if el.get_attribute("href") and el.get_attribute("href").startswith("https://x.com/")
-                and "/following" not in (el.get_attribute("href") or "")
-                and "search?q=" not in (el.get_attribute("href") or "")
+                if (href := el.get_attribute("href")) and href.startswith("https://x.com/")
+                and href is not None
+                and "/following" not in href
+                and "search?q=" not in href
             }
 
             new_handles = current_handles - extracted_handles
