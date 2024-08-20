@@ -50,7 +50,7 @@ def get_following(driver, handle, existing_follows, max_accounts=None):
     """Fetch following accounts for a specific user using Selenium."""
     from selenium.webdriver.common.by import By
 
-    url = f"https://twitter.com/{handle}/following"
+    url = f"https://x.com/{handle}/following"
     driver.get(url)
     logging.info(f"Fetching new following for {handle}")
     time.sleep(10)  # Initial wait for page load
@@ -84,7 +84,10 @@ def get_following(driver, handle, existing_follows, max_accounts=None):
                 for el in elements
                 if "/following" not in el.get_attribute("href")
                 and "search?q=%23" not in el.get_attribute("href")
-                and "search?q=%24" not in el.get_attribute("href")  # Exclude cashtag searches
+                and "search?q=%24" not in el.get_attribute("href")
+                and el.get_attribute("href").startswith("https://x.com/")
+                and len(el.get_attribute("href").split("/")[-1]) > 1
+                and not any(char in el.get_attribute("href").split("/")[-1] for char in ['/', '?', '&', '='])
             }
 
             new_handles = current_handles.difference(extracted_handles)
