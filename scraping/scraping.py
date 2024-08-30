@@ -1,3 +1,4 @@
+import logging
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -8,14 +9,14 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from typing import Dict, List, Tuple, Optional, Any, Callable
 from datetime import datetime
-import logging
 import time
 import random
 import pickle
 import unicodedata
 from twitter.twitter import fetch_twitter_data_api  # Add this line
 
-
+# Set up logging
+logger = logging.getLogger(__name__)
 
 def clean_text(text: str) -> str:
     """Clean and normalize text."""
@@ -26,24 +27,64 @@ def clean_text(text: str) -> str:
 
 def scrape_twitter_profile(driver: webdriver.Chrome, username: str) -> Optional[Dict[str, Any]]:
     """Scrape Twitter profile data."""
-    try:
-        driver.get(f"https://x.com/{username}")
-        WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="UserName"]')))
-        
-        name_element = driver.find_element(By.CSS_SELECTOR, '[data-testid="UserName"] div span span')
-        description_element = driver.find_element(By.CSS_SELECTOR, '[data-testid="UserDescription"]')
-        
-        return {
-            "username": username,
-            "name": clean_text(name_element.text) if name_element else "",
-            "description": clean_text(description_element.text) if description_element else "",
-        }
-    except TimeoutException:
-        logging.error(f"Timeout while loading profile for {username}")
-    except NoSuchElementException:
-        logging.error(f"Required elements not found for {username}")
-    except Exception as e:
-        logging.error(f"Error scraping data for {username}: {e}")
+    retry_count = 0
+    while retry_count < 3:
+        try:
+            driver.get(f"https://x.com/{username}")
+            WebDriverWait(driver, 20).until(EC.presence_of_element_located((By.CSS_SELECTOR, '[data-testid="UserName"]')))
+            
+            profile_data = {"Username": username}
+
+            def safe_get_text(selector):
+                try:
+                    element = driver.find_element(By.CSS_SELECTOR, selector)
+                    return clean_text(element.text)
+                except NoSuchElementException:
+                    return None
+
+            def safe_get_attribute(selector, attribute):
+                try:
+                    element = driver.find_element(By.CSS_SELECTOR, selector)
+                    return element.get_attribute(attribute)
+                except NoSuchElementException:
+                    return None
+
+            profile_data.update({
+                "Full Name": safe_get_text('[data-testid="UserName"] div span span'),
+                "Description": safe_get_text('[data-testid="UserDescription"]'),
+                "Location": safe_get_text('[data-testid="UserProfileHeader_Items"] [data-testid="UserLocation"]'),
+                "Website": safe_get_attribute('[data-testid="UserProfileHeader_Items"] [data-testid="UserUrl"]', "href"),
+                "Join Date": safe_get_text('[data-testid="UserProfileHeader_Items"] [data-testid="UserJoinDate"]'),
+                "Followers Count": safe_get_text('a[href$="/verified_followers"] span span'),
+                "Listed Count": safe_get_text('a[href$="/lists"] span span'),
+            })
+
+            # Try to get Account ID
+            try:
+                account_id = driver.find_element(By.CSS_SELECTOR, '[data-testid="UserProfileHeader_Items"]').get_attribute('href').split('/')[-1]
+                profile_data["Account ID"] = account_id
+            except:
+                pass
+
+            # Remove None values
+            profile_data = {k: v for k, v in profile_data.items() if v is not None}
+
+            logger.info(f"Successfully scraped data for {username}")
+            return profile_data
+
+        except TimeoutException:
+            if retry_count == 0:
+                logger.warning(f"Timeout while loading profile for {username}. Retrying...")
+                driver.refresh()
+                time.sleep(5)
+                retry_count += 1
+            else:
+                logger.error(f"Timeout while loading profile for {username} after retry.")
+                return None
+        except Exception as e:
+            logger.error(f"Error scraping data for {username}: {e}")
+            return None
+
     return None
 
 
@@ -56,7 +97,6 @@ def update_twitter_data(
 ) -> Tuple[Dict[str, Any], int]:
     """Update Twitter data for unenriched accounts."""
     updated_count = 0
-    use_api = True
 
     for record_id, username in unenriched_accounts:
         username_lower = username.lower()
@@ -64,15 +104,7 @@ def update_twitter_data(
         if username_lower in existing_data:
             continue
 
-        twitter_data = None
-        if use_api:
-            twitter_data = fetch_twitter_data_api(username, bearer_token)
-            if twitter_data is None:
-                use_api = False
-                logging.info("Switching to web scraping method")
-        
-        if not use_api or twitter_data is None:
-            twitter_data = scrape_twitter_profile(driver, username)
+        twitter_data = scrape_twitter_profile(driver, username)
         
         if twitter_data is not None:
             existing_data[username_lower] = {
@@ -94,6 +126,7 @@ def init_driver() -> webdriver.Chrome:
     options.add_argument("--disable-gpu")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
     service = Service(ChromeDriverManager().install())
     logging.info(f"Using ChromeDriver version: {service.path}")
     driver = webdriver.Chrome(service=service, options=options)
@@ -142,6 +175,7 @@ def get_following(driver: webdriver.Chrome, handle: str, existing_follows: set, 
     try:
         while True:
             driver.execute_script("window.scrollBy(0, 100);")  # Scroll gradually
+            time.sleep(random.uniform(1, 3))  # Random delay between 1 and 3 seconds
             time.sleep(random.randint(1, 5))  # Random pause to simulate human behavior
 
             elements = driver.find_elements(

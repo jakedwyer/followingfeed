@@ -23,7 +23,7 @@ from scrape_empty_accounts import main as scrape_empty_accounts_main
 # Global constants
 BASE_ID = 'appYCZWcmNBXB2uUS'
 LOCK_FILE = '/tmp/your_script_lock'
-VENV_PATH = '/root/followfeed/xfeed/bin/activate_this.py'
+VENV_PATH = '/root/followfeed/xfeed/bin/activate'
 
 def acquire_lock():
     global lock_fd
