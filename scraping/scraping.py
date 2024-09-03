@@ -60,7 +60,7 @@ def scrape_twitter_profile(driver: webdriver.Chrome, username: str) -> Union[Dic
         def safe_get_text(selector: str) -> Optional[str]:
             try:
                 element = WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
-                return clean_text(element.text)
+                return clean_text(' '.join(element.text.split()))
             except (NoSuchElementException, TimeoutException):
                 logger.warning(f"Element not found: {selector}")
                 return None
