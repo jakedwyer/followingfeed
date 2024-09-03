@@ -3,7 +3,7 @@ import os
 import json
 import requests
 import logging
-from typing import Dict, List, Tuple, Optional, Any, TypedDict, Set
+from typing import Dict, List, Tuple, Optional, Any, TypedDict, Set, Union
 from datetime import datetime
 from pyairtable import Api
 from scraping.scraping import init_driver, load_cookies, scrape_twitter_profile, DELETE_RECORD_INDICATOR
@@ -87,29 +87,33 @@ def parse_number(value: Any) -> int:
         logger.warning(f"Could not parse number: {value}. Setting to 0.")
         return 0
 
-def parse_twitter_date(date_string: str) -> Optional[str]:
-    months = {
-        'January': 1, 'February': 2, 'March': 3, 'April': 4, 'May': 5, 'June': 6,
-        'July': 7, 'August': 8, 'September': 9, 'October': 10, 'November': 11, 'December': 12
-    }
-    try:
-        # Split the string into parts
-        parts = date_string.split()
-        if len(parts) != 3 or not parts[2].isdigit():
-            return None
-        month = months.get(parts[1])
-        year = int(parts[2])
-        if not month:
-            return None
-        # Create a datetime object and format it as YYYY-MM-DD
-        date = datetime.date(year, month, 1)
-        return date.strftime("%Y-%m-%d")
-    except ValueError as e:
-        logger.error(f"Error parsing date '{date_string}': {e}")
-        return None
-    except Exception as e:
-        logger.error(f"Unexpected error parsing date '{date_string}': {e}")
-        return None
+def parse_date(date_string: Union[str, None]) -> str:
+    if not date_string:
+        return ''
+    
+    date_string = date_string.strip()
+    
+    # Handle "Joined" format
+    if date_string.startswith('Joined'):
+        date_string = date_string.replace('Joined', '').strip()
+    
+    # Try parsing various date formats
+    date_formats = [
+        "%B %Y",  # e.g., "November 2017"
+        "%Y-%m-%d",  # e.g., "2017-11-01"
+        "%Y-%m-%d %H:%M:%S",  # e.g., "2017-11-01 12:00:00"
+    ]
+    
+    for date_format in date_formats:
+        try:
+            date_obj = datetime.strptime(date_string, date_format)
+            return date_obj.strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    
+    # If all parsing attempts fail, return the original string
+    logger.warning(f"Could not parse date '{date_string}'. Keeping original value.")
+    return date_string
 
 def format_data_for_airtable(data: Dict[str, Any]) -> Dict[str, Any]:
     formatted_data = {}
@@ -117,16 +121,9 @@ def format_data_for_airtable(data: Dict[str, Any]) -> Dict[str, Any]:
     for key, value in data.items():
         if key in ["Followers Count", "Listed Count"]:
             formatted_data[key] = parse_number(value)
-        elif key == "Join Date":
-            if value and value.startswith("Joined"):
-                formatted_date = parse_twitter_date(value)
-                if formatted_date:
-                    formatted_data["Created At"] = formatted_date
-                else:
-                    logger.warning(f"Could not parse Join Date '{value}'. Saving as is.")
-                    formatted_data["Created At"] = clean_text(value)
-            else:
-                formatted_data["Created At"] = clean_text(value) if value else None
+        elif key == "Join Date" or key == "Created At":
+            formatted_date = parse_date(value)
+            formatted_data["Created At"] = formatted_date
         else:
             # For text fields, ensure they're strings and clean them
             formatted_data[key] = clean_text(str(value)) if value is not None else None
@@ -153,7 +150,7 @@ def fetch_twitter_data_api(username: str) -> Optional[Dict[str, Any]]:
 
 def get_unenriched_accounts() -> List[Tuple[str, str]]:
     try:
-        records = table.all(formula="OR(NOT({Account ID}), BLANK({Full Name}))")
+        records = table.all(formula="OR({Full Name} = BLANK(), {Description} = BLANK())")
         logger.info(f"Pulled {len(records)} unenriched records from Airtable")
         return [(record['id'], record['fields']['Username'].lower()) for record in records if 'Username' in record['fields']]
     except Exception as e:
@@ -223,52 +220,65 @@ def prepare_update_record(record_id: str, username: str, data: Dict[str, Any]) -
             "Description": twitter_data.get('description', ''),
             "Location": twitter_data.get('location', ''),
             "Website": twitter_data.get('website', ''),
-            "Created At": twitter_data.get('created_at', ''),
+            "Created At": parse_date(twitter_data.get('created_at') or twitter_data.get('Join Date', '')),
             "Followers Count": twitter_data.get('followers_count', ''),
             "Listed Count": twitter_data.get('listed_count', ''),
             "Account ID": twitter_data.get('account_id', '')
         }
         
-        # Remove empty fields
-        formatted_data = {k: v for k, v in formatted_data.items() if v}
+        # Only remove empty fields that are not Full Name or Description
+        formatted_data = {k: v for k, v in formatted_data.items() if v or k in ['Full Name', 'Description']}
         
         if formatted_data:
             return {'id': record_id, 'fields': formatted_data}
         else:
+            logger.warning(f"No updateable data for {username}")
             return None
     except Exception as e:
         logger.error(f"Unexpected error preparing record for {username}: {e}", exc_info=True)
         return None
 
 def update_airtable(records_to_update: List[Tuple[str, str, Dict[str, Any]]]) -> None:
-    batches = [records_to_update[i:i + AIRTABLE_BATCH_SIZE] for i in range(0, len(records_to_update), AIRTABLE_BATCH_SIZE)]
+    # Prepare all records first
+    prepared_records = [
+        prepare_update_record(record_id, username, data)
+        for record_id, username, data in records_to_update
+        if data
+    ]
+    
+    # Filter out None values and records with empty fields
+    valid_records = [record for record in prepared_records if record and record['fields']]
+    
+    logger.info(f"Total records to update: {len(records_to_update)}")
+    logger.info(f"Records with valid data after preparation: {len(valid_records)}")
+    logger.info(f"Skipped records: {len(records_to_update) - len(valid_records)}")
+
+    # Create batches only from valid records
+    batches = [valid_records[i:i + AIRTABLE_BATCH_SIZE] for i in range(0, len(valid_records), AIRTABLE_BATCH_SIZE)]
+    
     total_updated = 0
     for i, batch in enumerate(batches, 1):
-        prepared_batch = [prepare_update_record(record_id, username, data) for record_id, username, data in batch if data]
-        prepared_batch = [record for record in prepared_batch if record and record['fields']]
-        
-        if prepared_batch:
-            try:
-                headers = {
-                    "Authorization": f"Bearer {AIRTABLE_TOKEN}",
-                    "Content-Type": "application/json"
-                }
-                logger.debug(f"Sending batch {i} to Airtable: {json.dumps(prepared_batch, indent=2)}")
-                response = requests.patch(AIRTABLE_API_ENDPOINT, headers=headers, json={"records": prepared_batch})
-                response.raise_for_status()
-                batch_size = len(prepared_batch)
-                total_updated += batch_size
-                logger.info(f"Batch {i}: Updated {batch_size} records in Airtable")
-                logger.info(f"Updated accounts: {', '.join(username for _, username, _ in batch)}")
-            except requests.exceptions.RequestException as e:
-                logger.error(f"Error updating batch {i} in Airtable: {str(e)}", exc_info=True)
-                if hasattr(e, 'response') and e.response is not None:
-                    logger.error(f"Response content: {e.response.content}")
-                    logger.error(f"Request payload: {json.dumps(prepared_batch, indent=2)}")
-        else:
-            logger.warning(f"Batch {i} was empty after preparation, skipping update")
+        try:
+            headers = {
+                "Authorization": f"Bearer {AIRTABLE_TOKEN}",
+                "Content-Type": "application/json"
+            }
+            logger.debug(f"Sending batch {i} to Airtable: {json.dumps(batch, indent=2)}")
+            response = requests.patch(AIRTABLE_API_ENDPOINT, headers=headers, json={"records": batch})
+            response.raise_for_status()
+            batch_size = len(batch)
+            total_updated += batch_size
+            logger.info(f"Batch {i}: Updated {batch_size} records in Airtable")
+            logger.info(f"Updated accounts: {', '.join(record['fields'].get('Username', '') for record in batch)}")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error updating batch {i} in Airtable: {str(e)}", exc_info=True)
+            if hasattr(e, 'response') and e.response is not None:
+                logger.error(f"Response content: {e.response.content}")
+                logger.error(f"Request payload: {json.dumps(batch, indent=2)}")
 
     logger.info(f"Total records updated in Airtable: {total_updated}")
+    if len(records_to_update) > total_updated:
+        logger.info(f"Skipped {len(records_to_update) - total_updated} records due to lack of updateable data")
 
 def delete_airtable_record(record_id: str, headers: Dict[str, str]) -> None:
     response = airtable_api_request('DELETE', TABLE_ID, headers, record_id=record_id)
@@ -284,7 +294,7 @@ def prepare_record_for_airtable(username: str, data: Dict[str, Any]) -> Dict[str
         "Description": data.get("Description", ""),
         "Location": data.get("Location", ""),
         "Website": data.get("Website", ""),
-        "Created At": data.get("Join Date", ""),
+        "Created At": parse_date(data.get("Join Date", "")),
         "Followers Count": data.get("Followers Count", 0),
         "Listed Count": data.get("Listed Count", 0),
         "Account ID": data.get("Account ID", "")
@@ -304,90 +314,88 @@ def get_all_usernames_from_airtable() -> Set[str]:
         return set()
 
 def main() -> None:
+    driver = None
     try:
         # Load existing data from JSON file
         existing_data = load_and_clean_data()
         
-        # Get all usernames from Airtable
-        existing_usernames = get_all_usernames_from_airtable()
-        
-        # Get unenriched accounts from Airtable
-        unenriched_accounts = get_unenriched_accounts()
+        # Get all records from Airtable
+        all_airtable_records = table.all()
         
         logger.info(f"Total accounts in user_details.json: {len(existing_data)}")
-        logger.info(f"Total unenriched accounts from Airtable: {len(unenriched_accounts)}")
-        logger.info(f"Total existing usernames in Airtable: {len(existing_usernames)}")
+        logger.info(f"Total accounts in Airtable: {len(all_airtable_records)}")
         
         records_to_update = []
-        records_to_add = []
-        airtable_usernames = set(username.lower() for _, username in unenriched_accounts)
-
-        for username, data in existing_data.items():
-            if username.lower() in airtable_usernames:
-                record_id = next(rid for rid, uname in unenriched_accounts if uname.lower() == username.lower())
-                records_to_update.append((record_id, username, data))
-            elif username.lower() not in existing_usernames:
-                records_to_add.append(prepare_record_for_airtable(username, data['data']))
-
-        logger.info(f"Total records matched and ready to update: {len(records_to_update)}")
-        logger.info(f"Total new records to be added to Airtable: {len(records_to_add)}")
-
-        if records_to_update:
-            update_airtable(records_to_update)
-        else:
-            logger.info("No records to update in Airtable from existing data")
-
-        if records_to_add:
-            headers = {
-                "Authorization": f"Bearer {AIRTABLE_TOKEN}",
-                "Content-Type": "application/json"
-            }
-            post_airtable_records(records_to_add, TABLE_ID, headers)
-            logger.info(f"Added {len(records_to_add)} new records to Airtable")
-        else:
-            logger.info("No new records to add to Airtable")
-
-        # If there are still unenriched accounts, proceed with scraping
-        remaining_accounts = [(record_id, username) for record_id, username in unenriched_accounts if username.lower() not in existing_data]
         
-        if remaining_accounts:
-            logger.info(f"Proceeding to scrape data for {len(remaining_accounts)} remaining accounts")
-            driver = init_driver()
-            load_cookies(driver, 'twitter_cookies.pkl')
+        # Initialize WebDriver
+        driver = init_driver()
+        load_cookies(driver, 'twitter_cookies.pkl')
+        
+        headers = {
+            "Authorization": f"Bearer {AIRTABLE_TOKEN}",
+            "Content-Type": "application/json"
+        }
+        
+        for record in all_airtable_records:
+            record_id = record['id']
+            username = record['fields'].get('Username', '').lower()
             
-            headers = {
-                "Authorization": f"Bearer {AIRTABLE_TOKEN}",
-                "Content-Type": "application/json"
-            }
+            if not username:
+                continue
             
-            for record_id, username in remaining_accounts:
+            # Check if we have data in JSON file
+            json_data = existing_data.get(username, {}).get('data', {})
+            
+            if json_data:
+                # Prepare update data
+                update_data = {}
+                for field, value in json_data.items():
+                    if field not in record['fields'] or not record['fields'][field]:
+                        update_data[field] = value
+                
+                if update_data:
+                    records_to_update.append((record_id, username, {'data': update_data}))
+                    logger.info(f"Found supplementary data in JSON for {username}")
+            
+            # If the record is unenriched, proceed with scraping
+            if not record['fields'].get('Full Name') or not record['fields'].get('Description'):
+                # Attempt to scrape
                 twitter_data = scrape_twitter_profile(driver, username)
+                
                 if twitter_data == DELETE_RECORD_INDICATOR:
                     delete_airtable_record(record_id, headers)
                     logger.warning(f"Deleted record for {username} due to persistent loading failure")
                 elif twitter_data:
                     if isinstance(twitter_data, dict):
-                        save_individual_record(username, twitter_data)
-                        records_to_update.append((record_id, username, {'data': twitter_data}))
+                        # Merge scraped data with existing JSON data, prioritizing scraped data
+                        merged_data = {**json_data, **twitter_data}
+                        save_individual_record(username, merged_data)
+                        records_to_update.append((record_id, username, {'data': merged_data}))
+                        logger.info(f"Successfully scraped and merged data for {username}")
                     else:
-                        logger.warning(f"Unexpected data type for {username}. Skipping save and update.")
+                        logger.warning(f"Unexpected data type for {username}. Using JSON data if available.")
+                        if json_data:
+                            records_to_update.append((record_id, username, {'data': json_data}))
                 else:
-                    logger.warning(f"No data scraped for {username}. Moving to next account.")
+                    logger.warning(f"No data scraped for {username}. Using JSON data if available.")
+                    if json_data:
+                        records_to_update.append((record_id, username, {'data': json_data}))
+                
                 # Add a delay between requests to avoid rate limiting
                 time.sleep(random.uniform(5, 10))
-            
-            if records_to_update:
-                update_airtable(records_to_update)
-            
-            driver.quit()
+        
+        if records_to_update:
+            update_airtable(records_to_update)
         
         logger.info(f"Script completed. Attempted to enrich {len(records_to_update)} records in total.")
 
     except Exception as e:
         logger.exception(f"An unexpected error occurred: {e}")
     finally:
-        if 'driver' in locals():
+        if driver:
+            logger.info("Closing WebDriver...")
             driver.quit()
+            logger.info("WebDriver closed successfully.")
 
 if __name__ == "__main__":
     main()
