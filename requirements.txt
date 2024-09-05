@@ -6,3 +6,5 @@ webdriver-manager
 pandas
 datetime
 logging
+openai
+pyairtable
