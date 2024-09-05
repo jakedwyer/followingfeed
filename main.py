@@ -19,6 +19,7 @@ from utils.logging_setup import setup_logging
 from twitter.twitter import fetch_list_members, fetch_twitter_data_api
 from scraping.scraping import init_driver, load_cookies, get_following
 from scrape_empty_accounts import main as scrape_empty_accounts_main
+from fetch_profile import main as fetch_profile_main
 
 # Global constants
 BASE_ID = 'appYCZWcmNBXB2uUS'
@@ -146,6 +147,7 @@ def main():
                         logging.error(f"Error processing {username}: {e}")
 
             logging.info(f"Total new handles found: {total_new_handles}")
+            fetch_profile_main()
             scrape_empty_accounts_main()
 
     finally:
