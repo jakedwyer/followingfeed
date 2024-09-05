@@ -43,3 +43,5 @@ push_to_git.sh
 config.yaml
 app.log.1
 user_details.json
+/screenshots/
+
