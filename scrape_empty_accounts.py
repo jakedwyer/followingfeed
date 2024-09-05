@@ -209,40 +209,40 @@ class UpdateRecordDict(TypedDict):
     id: str
     fields: Dict[str, Any]
 
-def prepare_update_record(record_id: str, username: str, data: Dict[str, Any]) -> Optional[UpdateRecordDict]:
-    try:
-        logger.debug(f"Preparing update for {username}. Data received: {json.dumps(data, indent=2)}")
-        
-        twitter_data = data.get('data', {})
-        formatted_data = {
-            "Username": twitter_data.get('username', ''),
-            "Full Name": twitter_data.get('name', ''),
-            "Description": twitter_data.get('description', ''),
-            "Location": twitter_data.get('location', ''),
-            "Website": twitter_data.get('website', ''),
-            "Created At": parse_date(twitter_data.get('created_at') or twitter_data.get('Join Date', '')),
-            "Followers Count": twitter_data.get('followers_count', ''),
-            "Listed Count": twitter_data.get('listed_count', ''),
-            "Account ID": twitter_data.get('account_id', '')
-        }
-        
-        # Only remove empty fields that are not Full Name or Description
-        formatted_data = {k: v for k, v in formatted_data.items() if v or k in ['Full Name', 'Description']}
-        
-        if formatted_data:
-            return {'id': record_id, 'fields': formatted_data}
-        else:
-            logger.warning(f"No updateable data for {username}")
-            return None
-    except Exception as e:
-        logger.error(f"Unexpected error preparing record for {username}: {e}", exc_info=True)
+def prepare_update_record(record_id: str, username: str, data: Dict[str, Any], existing_fields: Dict[str, Any]) -> Optional[UpdateRecordDict]:
+    twitter_data = data.get('data', {})
+    formatted_data = {}
+    
+    field_mapping = {
+        "username": "Username",
+        "name": "Full Name",
+        "description": "Description",
+        "location": "Location",
+        "website": "Website",
+        "created_at": "Created At",
+        "followers_count": "Followers Count",
+        "listed_count": "Listed Count",
+        "account_id": "Account ID"
+    }
+    
+    for twitter_field, airtable_field in field_mapping.items():
+        new_value = twitter_data.get(twitter_field)
+        if new_value and new_value != existing_fields.get(airtable_field):
+            if airtable_field == "Created At":
+                new_value = parse_date(new_value)
+            formatted_data[airtable_field] = new_value
+    
+    if formatted_data:
+        return {'id': record_id, 'fields': formatted_data}
+    else:
+        logger.warning(f"No updateable data for {username}")
         return None
 
-def update_airtable(records_to_update: List[Tuple[str, str, Dict[str, Any]]]) -> None:
+def update_airtable(records_to_update: List[Tuple[str, str, Dict[str, Any], Dict[str, Any]]]) -> None:
     # Prepare all records first
     prepared_records = [
-        prepare_update_record(record_id, username, data)
-        for record_id, username, data in records_to_update
+        prepare_update_record(record_id, username, data, existing_fields)
+        for record_id, username, data, existing_fields in records_to_update
         if data
     ]
     
@@ -327,7 +327,38 @@ def main() -> None:
         
         records_to_update = []
         
-        # Initialize WebDriver
+        # First, update Airtable with existing JSON data
+        for record in all_airtable_records:
+            record_id = record['id']
+            username = record['fields'].get('Username', '').lower()
+            
+            if not username:
+                continue
+            
+            json_data = existing_data.get(username, {}).get('data', {})
+            
+            if json_data and 'Full Name' in json_data and 'Description' in json_data:
+                update_data = {
+                    'Full Name': json_data['Full Name'],
+                    'Description': json_data['Description']
+                }
+                # Add other fields if they exist in JSON and are blank in Airtable
+                for field in ['Location', 'Website', 'Created At', 'Followers Count', 'Listed Count', 'Account ID']:
+                    if field in json_data and (field not in record['fields'] or not record['fields'][field]):
+                        update_data[field] = json_data[field]
+                
+                records_to_update.append((record_id, username, {'data': update_data}))
+                logger.info(f"Found supplementary data in JSON for {username}")
+        
+        # Update Airtable with existing JSON data
+        if records_to_update:
+            update_airtable(records_to_update)
+            logger.info(f"Updated {len(records_to_update)} records with existing JSON data")
+        
+        # Reset records_to_update for the next phase
+        records_to_update = []
+        
+        # Initialize WebDriver for scraping
         driver = init_driver()
         load_cookies(driver, 'twitter_cookies.pkl')
         
@@ -336,6 +367,7 @@ def main() -> None:
             "Content-Type": "application/json"
         }
         
+        # Now, attempt to enrich remaining unenriched records
         for record in all_airtable_records:
             record_id = record['id']
             username = record['fields'].get('Username', '').lower()
@@ -343,21 +375,7 @@ def main() -> None:
             if not username:
                 continue
             
-            # Check if we have data in JSON file
-            json_data = existing_data.get(username, {}).get('data', {})
-            
-            if json_data:
-                # Prepare update data
-                update_data = {}
-                for field, value in json_data.items():
-                    if field not in record['fields'] or not record['fields'][field]:
-                        update_data[field] = value
-                
-                if update_data:
-                    records_to_update.append((record_id, username, {'data': update_data}))
-                    logger.info(f"Found supplementary data in JSON for {username}")
-            
-            # If the record is unenriched, proceed with scraping
+            # Check if the record is still unenriched
             if not record['fields'].get('Full Name') or not record['fields'].get('Description'):
                 # Attempt to scrape
                 twitter_data = scrape_twitter_profile(driver, username)
@@ -367,27 +385,23 @@ def main() -> None:
                     logger.warning(f"Deleted record for {username} due to persistent loading failure")
                 elif twitter_data:
                     if isinstance(twitter_data, dict):
-                        # Merge scraped data with existing JSON data, prioritizing scraped data
-                        merged_data = {**json_data, **twitter_data}
-                        save_individual_record(username, merged_data)
-                        records_to_update.append((record_id, username, {'data': merged_data}))
-                        logger.info(f"Successfully scraped and merged data for {username}")
+                        update_record = prepare_update_record(record_id, username, {'data': twitter_data}, record['fields'])
+                        if update_record:
+                            records_to_update.append((record_id, username, update_record['fields']))
+                            logger.info(f"Successfully scraped and prepared update data for {username}")
                     else:
-                        logger.warning(f"Unexpected data type for {username}. Using JSON data if available.")
-                        if json_data:
-                            records_to_update.append((record_id, username, {'data': json_data}))
+                        logger.warning(f"Unexpected data type for {username}. Skipping.")
                 else:
-                    logger.warning(f"No data scraped for {username}. Using JSON data if available.")
-                    if json_data:
-                        records_to_update.append((record_id, username, {'data': json_data}))
+                    logger.warning(f"No data scraped for {username}. Skipping.")
                 
                 # Add a delay between requests to avoid rate limiting
                 time.sleep(random.uniform(5, 10))
         
+        # Update Airtable with newly scraped data
         if records_to_update:
             update_airtable(records_to_update)
         
-        logger.info(f"Script completed. Attempted to enrich {len(records_to_update)} records in total.")
+        logger.info(f"Script completed. Attempted to enrich {len(records_to_update)} records through scraping.")
 
     except Exception as e:
         logger.exception(f"An unexpected error occurred: {e}")
