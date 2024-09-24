@@ -1,25 +1,24 @@
 import logging
 from logging.handlers import RotatingFileHandler
+import os
+
 
 def setup_logging():
-    log_file = '/root/followfeed/main.log'
-    max_log_size = 10 * 1024 * 1024  # 10 MB
-    backup_count = 5
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
 
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.INFO)
+    if not logger.handlers:
+        # File handler
+        file_handler = logging.FileHandler("main.log")
+        file_handler.setLevel(logging.INFO)
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
 
-    file_handler = RotatingFileHandler(
-        log_file, maxBytes=max_log_size, backupCount=backup_count
-    )
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(formatter)
-
-    root_logger.addHandler(file_handler)
-
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    root_logger.addHandler(console_handler)
-
-    logging.info("Logging setup completed")
-    logging.info(f"Log file location: {log_file}")
+        # Console handler
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.INFO)
+        console_handler.setFormatter(formatter)
+        logger.addHandler(console_handler)
