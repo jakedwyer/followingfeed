@@ -21,14 +21,14 @@ if not AIRTABLE_TOKEN:
 
 def format_date(date_string: str) -> str:
     if not date_string:
-        return None
+        return None # type: ignore
     try:
         # Attempt to parse the date string
         date_obj = datetime.strptime(date_string, "%Y-%m-%d")
         return date_obj.strftime("%Y-%m-%d")
     except ValueError:
         # If parsing fails, return None
-        return None
+        return None # type: ignore
 
 def prepare_record_data(data: Dict[str, Any]) -> Dict[str, Any]:
     prepared_data = {}
