@@ -33,7 +33,7 @@ config = load_env_variables()
 
 AIRTABLE_TOKEN: str = config["airtable_token"]
 BASE_ID: str = config["airtable_base_id"]
-TABLE_ID: str = config.get("airtable_followers_table", "tblJCXhcrCxDUJR3F")
+TABLE_ID: str = config.get("airtable_accounts_table", "tblJCXhcrCxDUJR3F")
 JSON_FILE_PATH: str = config.get("json_file_path", "user_details.json")
 
 # Ensure critical configuration variables are present
@@ -124,6 +124,7 @@ def format_data_for_airtable(data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Format user data to match Airtable's schema.
     Cleans text fields and parses dates.
+    Preserves line breaks and rich text formatting.
     """
     formatted_data = {
         "Account ID": data.get("Username", ""),
@@ -213,10 +214,18 @@ def delete_airtable_record(record_id: str) -> None:
 
 def clean_text(text: str) -> str:
     """
-    Remove non-ASCII characters and normalize whitespace.
+    Normalize whitespace and perform optional cleaning.
+    Preserves non-ASCII characters and line breaks to maintain rich text integrity.
     """
-    text = unicodedata.normalize("NFKD", text).encode("ASCII", "ignore").decode("ASCII")
-    return re.sub(r"\s+", " ", text).strip()
+    # Normalize Unicode characters
+    text = unicodedata.normalize("NFKC", text)
+    # Remove unwanted control characters while preserving printable characters and line breaks
+    text = "".join(c for c in text if c.isprintable() or c == "\n")
+    # Normalize whitespace within each line but preserve line breaks
+    lines = text.split("\n")
+    cleaned_lines = [re.sub(r"\s+", " ", line).strip() for line in lines]
+    cleaned_text = "\n".join(cleaned_lines)
+    return cleaned_text
 
 
 def enrich_with_existing_data(
