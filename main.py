@@ -168,13 +168,12 @@ def process_list_members(
 
 
 def main():
-    setup_logging()
+    # Do not call setup_logging() here
     acquire_lock()
     try:
-        env_vars = load_env_variables()
         logger = logging.getLogger(__name__)
         logger.info("Main function started")
-
+        env_vars = load_env_variables()
         headers = {"Authorization": f"Bearer {env_vars['airtable_token']}"}
         twitter_headers = {
             "Authorization": f"Bearer {env_vars['twitter_bearer_token']}"

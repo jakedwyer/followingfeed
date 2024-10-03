@@ -53,34 +53,28 @@ def retry_with_backoff(func):
 
 @retry_with_backoff
 def clean_text(text: str) -> str:
-    """Clean and normalize text."""
+    """
+    Normalize and clean text, preserving special characters and ensuring proper encoding.
+    """
     if not isinstance(text, str):
         logger.warning(f"Expected string, got {type(text)}. Converting to string.")
         text = str(text)
 
-    # Decode Unicode escape sequences
-    decoded_text = text.encode("utf-8").decode("unicode_escape", errors="ignore")
+    # Normalize Unicode characters using NFC to preserve characters as they are
+    text = unicodedata.normalize("NFC", text)
 
-    # Normalize to NFKC form (compatible decomposition followed by canonical composition)
-    normalized_text = unicodedata.normalize("NFKC", decoded_text)
+    # Replace common HTML entities if they appear in the text
+    text = text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
 
-    # Replace common HTML entities
-    normalized_text = (
-        normalized_text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+    # Remove unwanted control characters while preserving necessary ones (like newlines and tabs)
+    text = "".join(
+        c for c in text if unicodedata.category(c)[0] != "C" or c in ("\n", "\t")
     )
 
-    # Remove or replace problematic characters
-    normalized_text = re.sub(
-        r"[\u2000-\u200F\u2028-\u202F]", "", normalized_text
-    )  # Remove Unicode space characters
-    normalized_text = normalized_text.replace(
-        "\u2022", "•"
-    )  # Replace bullet with standard bullet
-
-    # Remove non-printable characters except for newlines and tabs
-    cleaned_text = "".join(
-        char for char in normalized_text if char.isprintable() or char in "\n\t"
-    ).strip()
+    # Normalize whitespace within each line but preserve line breaks
+    lines = text.split("\n")
+    cleaned_lines = [re.sub(r"\s+", " ", line).strip() for line in lines]
+    cleaned_text = "\n".join(cleaned_lines)
 
     return cleaned_text
 
@@ -140,7 +134,7 @@ def scrape_twitter_profile(
                 )
                 if get_attribute:
                     return clean_text(element.get_attribute(get_attribute))
-                return clean_text(" ".join(element.text.split()))
+                return clean_text(element.text)
             except (NoSuchElementException, TimeoutException):
                 logger.warning(f"Element not found: {selector}")
                 return None
