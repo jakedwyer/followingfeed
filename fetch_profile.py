@@ -135,6 +135,33 @@ def create_updated_record(record, profile):
     return updated_record
 
 
+def save_user_data(username: str, user_data: dict, json_file_path: str):
+    # Load existing data
+    if os.path.exists(json_file_path):
+        try:
+            with open(json_file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except json.JSONDecodeError:
+            logger.error(f"Error decoding JSON from {json_file_path}")
+            data = {}
+    else:
+        data = {}
+
+    # Update the data with the new entry
+    data[username] = {
+        "data": user_data,
+        "last_updated": datetime.utcnow().isoformat() + "Z",
+    }
+
+    # Save back to JSON file
+    try:
+        with open(json_file_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            logger.info(f"Saved data for '{username}' to {json_file_path}")
+    except Exception as e:
+        logger.error(f"Error writing to {json_file_path}: {e}")
+
+
 def main():
     try:
         if not check_tokens():
