@@ -77,8 +77,7 @@ def get_unenriched_accounts() -> List[Tuple[str, str]]:
 
 def load_and_clean_data() -> Dict[str, Any]:
     """
-    Load existing user data from JSON file and clean it.
-    Removes records with missing or empty 'data' fields.
+    Load existing user data from JSON file.
     """
     try:
         with open(JSON_FILE_PATH, "r", encoding="utf-8") as f:
@@ -92,19 +91,13 @@ def load_and_clean_data() -> Dict[str, Any]:
                 and user_data["data"]  # Ensure 'data' is not empty
             ):
                 cleaned_data[username_lower] = {
-                    "data": user_data["data"],  # Removed redundant formatting
+                    "data": user_data["data"],
                     "last_updated": user_data.get("last_updated", ""),
                 }
             else:
                 logger.debug(
                     f"Skipping user '{username}' as 'data' is missing or empty."
                 )
-        removed_count = len(data) - len(cleaned_data)
-        if removed_count > 0:
-            logger.warning(
-                f"Removed {removed_count} erroneous or incomplete records from JSON data"
-            )
-            save_data(cleaned_data)
         logger.info(
             f"Loaded and cleaned {len(cleaned_data)} records from {JSON_FILE_PATH}"
         )
@@ -328,17 +321,29 @@ def main() -> None:
         if records_without_data:
             # Initialize WebDriver
             driver = init_driver()
+
+            # Create a mapping from username to record_id
+            username_to_record_id = {
+                username.lower(): record_id
+                for record_id, username in records_without_data
+            }
+
             enriched_data = enrich_with_scraped_data(driver, records_without_data)
 
             # Prepare records to update Airtable with scraped data
             scraped_records_to_update = []
             for username, user_info in enriched_data.items():
-                scraped_records_to_update.append(
-                    {
-                        "id": user_info["id"],  # Access record_id
-                        "fields": format_data_for_airtable(user_info["data"]),
-                    }
-                )
+                # Retrieve the record_id using the username
+                record_id = username_to_record_id.get(username.lower())
+                if record_id:
+                    scraped_records_to_update.append(
+                        {
+                            "id": record_id,
+                            "fields": format_data_for_airtable(user_info),
+                        }
+                    )
+                else:
+                    logger.warning(f"Record ID not found for username {username}")
 
             # Update Airtable with scraped data outside the loop
             if scraped_records_to_update:
