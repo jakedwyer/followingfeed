@@ -25,26 +25,44 @@ TABLE_ID = os.environ.get("AIRTABLE_ACCOUNTS_TABLE", "tblJCXhcrCxDUJR3F")
 if not AIRTABLE_TOKEN:
     raise ValueError("AIRTABLE_TOKEN environment variable is not set")
 
+# Load schema to get valid fields
+with open("airtableschema.json", "r") as f:
+    schema = json.load(f)
 
-def format_date(date_string: str) -> str:
+# Get fields for Accounts table
+accounts_table = next(table for table in schema["tables"] if table["id"] == TABLE_ID)
+valid_fields = {field["name"] for field in accounts_table["fields"]}
+
+
+def format_date(date_string: str) -> str | None:
     if not date_string:
-        return None  # type: ignore
+        return None
+
+    # Check if already in YYYY-MM-DD format
+    if len(date_string) == 10 and date_string[4] == "-" and date_string[7] == "-":
+        return date_string
+
     try:
-        # Attempt to parse the date string
-        date_obj = datetime.strptime(date_string, "%Y-%m-%d")
+        # Attempt to parse the date string in ISO 8601 format
+        date_obj = datetime.fromisoformat(date_string.replace("Z", "+00:00"))
         return date_obj.strftime("%Y-%m-%d")
     except ValueError:
-        # If parsing fails, return None
-        return None  # type: ignore
+        logger.warning(f"Invalid date format: {date_string}")
+        return None
 
 
 def prepare_record_data(data: Dict[str, Any]) -> Dict[str, Any]:
     prepared_data = {}
     for key, value in data.items():
+        # Skip if field not in schema
+        if key not in valid_fields:
+            continue
+
         if key == "Created At":
             formatted_date = format_date(value)
             if formatted_date:
                 prepared_data[key] = formatted_date
+            # Do not include the field if date is invalid or None
         elif key in [
             "Followers Count",
             "Following Count",
@@ -86,40 +104,53 @@ def main():
     if not airtable_records:
         logger.error("Failed to fetch records from Airtable. Exiting.")
         return
+
     airtable_usernames = {
-        record["fields"].get("Username", "").lower(): record
-        for record in airtable_records
+        record["fields"].get("Username") for record in airtable_records
     }
 
     records_to_update = []
-    records_to_create = []
+    for username, data in user_details.items():
+        if username not in airtable_usernames:
+            # Add logic for new records if needed
+            continue
 
-    for username, user_data in user_details.items():
-        if isinstance(user_data, dict) and "data" in user_data:
-            normalized_username = username.lower()
-            prepared_data = prepare_record_data(user_data["data"])
-            if normalized_username in airtable_usernames:
-                # Update existing record
-                record = airtable_usernames[normalized_username]
+        prepared_data = prepare_record_data(data)
+        if prepared_data:
+            # Find the record ID from Airtable
+            record = next(
+                (
+                    rec
+                    for rec in airtable_records
+                    if rec["fields"].get("Username") == username
+                ),
+                None,
+            )
+            if record:
                 records_to_update.append({"id": record["id"], "fields": prepared_data})
-            else:
-                # Create new record
-                records_to_create.append(
-                    {"fields": {"Username": username, **prepared_data}}
-                )
+
+    logger.info(f"Found {len(records_to_update)} records to update")
+
+    # Batch update records (Airtable allows up to 10 records per request)
+    BATCH_SIZE = 10
+    successful_updates = 0
+    for i in range(0, len(records_to_update), BATCH_SIZE):
+        batch = records_to_update[i : i + BATCH_SIZE]
+        response = update_airtable_records(TABLE_ID, batch, headers)
+        if response is None:
+            logger.error(
+                f"Failed to PATCH records in {TABLE_ID}. No response received."
+            )
+        elif response.status_code != 200:
+            logger.error(
+                f"Failed to PATCH records in {TABLE_ID}. Status code: {response.status_code}"
+            )
+            logger.error(f"Response content: {response.content}")
         else:
-            logger.warning(f"Skipping invalid record for username: {username}")
+            successful_updates += len(batch)
+            logger.info(f"Successfully updated batch {i // BATCH_SIZE + 1}")
 
-    # Update existing records
-    if records_to_update:
-        update_airtable_records(records_to_update, TABLE_ID, headers)
-
-    # Create new records
-    if records_to_create:
-        post_airtable_records(records_to_create, TABLE_ID, headers)
-
-    logger.info(f"Updated {len(records_to_update)} records")
-    logger.info(f"Created {len(records_to_create)} new records")
+    logger.info(f"Successfully updated {successful_updates} records in total")
 
 
 if __name__ == "__main__":
