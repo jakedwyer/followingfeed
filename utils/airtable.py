@@ -1,19 +1,24 @@
 import logging
 import requests
 import json
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Set
 from utils.config import load_env_variables
 from datetime import datetime
+import time
 
 logger = logging.getLogger(__name__)
 
-# Load environment variables
+# Load environment variables once at module level
 env_vars = load_env_variables()
-
-# Use environment variables
 BASE_ID = env_vars["airtable_base_id"]
 AIRTABLE_API_KEY = env_vars["airtable_token"]
 AIRTABLE_ACCOUNTS_TABLE = env_vars["airtable_accounts_table"]
+AIRTABLE_FOLLOWERS_TABLE = env_vars["airtable_followers_table"]
+# Common headers used across functions
+AIRTABLE_HEADERS = {
+    "Authorization": f"Bearer {AIRTABLE_API_KEY}",
+    "Content-Type": "application/json",
+}
 
 
 def airtable_api_request(
@@ -27,35 +32,64 @@ def airtable_api_request(
 
     if response.status_code in [200, 201]:
         return response.json()
-    else:
-        logger.error(
-            f"Failed to {method} records in {table_id}. Status code: {response.status_code}"
-        )
-        logger.error(f"Response content: {response.content}")
-        logger.error(f"Request URL: {url}")
-        logger.error(f"Request headers: {headers}")
-        logger.error(f"Request data: {data}")
-        return None
+
+    logger.error(
+        f"Failed to {method} records in {table_id}. Status code: {response.status_code}"
+    )
+    logger.error(f"Response content: {response.content}")
+    logger.error(f"Request URL: {url}")
+    logger.error(f"Request headers: {headers}")
+    logger.error(f"Request data: {data}")
+    return None
 
 
 def fetch_records_from_airtable(
     table_id: str, headers: Dict[str, str], formula: Optional[str] = None
 ) -> List[Dict[str, Any]]:
+    """
+    Fetch records from Airtable with support for pagination and filtering.
+
+    Args:
+        table_id: The ID or name of the table to fetch from
+        headers: Request headers including authorization
+        formula: Optional filterByFormula string for Airtable API
+
+    Returns:
+        List of record dictionaries from Airtable
+    """
     records = []
     offset = None
 
     while True:
-        params = {"offset": offset} if offset else {}
-        if formula:
-            params["filterByFormula"] = formula
-        data = airtable_api_request("GET", table_id, headers, params=params)
-        if data:
+        try:
+            params = {"offset": offset} if offset else {}
+            if formula:
+                params["filterByFormula"] = formula
+
+            data = airtable_api_request("GET", table_id, headers, params=params)
+            if not data:
+                logger.error(f"Failed to fetch records from table {table_id}")
+                return []
+
             records.extend(data.get("records", []))
+            logger.debug(
+                f"Fetched {len(data.get('records', []))} records from {table_id}"
+            )
+
             offset = data.get("offset")
             if not offset:
                 break
-        else:
+
+            # Rate limiting protection
+            time.sleep(0.2)
+
+        except Exception as e:
+            logger.error(
+                f"Error fetching records from {table_id}: {str(e)}", exc_info=True
+            )
             return []
+
+    logger.info(f"Total records fetched from {table_id}: {len(records)}")
     return records
 
 
@@ -69,33 +103,37 @@ def update_followers_field(follow_record_id, follower_record_id, headers):
     data = airtable_api_request(
         "GET", AIRTABLE_ACCOUNTS_TABLE, headers, record_id=follow_record_id
     )
-    if data:
-        followers = data.get("fields", {}).get("Followers", [])
-        if follower_record_id not in followers:
-            followers.append(follower_record_id)
-            update_payload = {"fields": {"Followers": followers}}
-            airtable_api_request(
-                "PATCH",
-                AIRTABLE_ACCOUNTS_TABLE,
-                headers,
-                data=update_payload,
-                record_id=follow_record_id,
-            )
-            logger.debug(
-                f"Updated Followers field for Account ID {follow_record_id} with Follower ID {follower_record_id}."
-            )
-    else:
+    if not data:
         logger.error(
             f"Failed to retrieve Account record {follow_record_id} for updating Followers field."
+        )
+        return
+
+    followers = data.get("fields", {}).get("Followers", [])
+    if follower_record_id not in followers:
+        followers.append(follower_record_id)
+        update_payload = {"fields": {"Followers": followers}}
+        airtable_api_request(
+            "PATCH",
+            AIRTABLE_ACCOUNTS_TABLE,
+            headers,
+            data=update_payload,
+            record_id=follow_record_id,
+        )
+        logger.debug(
+            f"Updated Followers field for Account ID {follow_record_id} with Follower ID {follower_record_id}."
         )
 
 
 def update_airtable_records(records, table_id, headers):
     formatted_records = []
+
+    # Load user details once
+    with open("user_details.json", "r") as f:
+        user_details = json.load(f)
+
     for record in records:
         username = record["fields"].get("Username", "").lower()
-        with open("user_details.json", "r") as f:
-            user_details = json.load(f)
         user_data = user_details.get(username, {}).get("data", {})
 
         formatted_record = {
@@ -115,7 +153,6 @@ def update_airtable_records(records, table_id, headers):
             },
         }
 
-        # Filter out records with no enriched fields
         if any(value for value in formatted_record["fields"].values()):
             formatted_records.append(formatted_record)
 
@@ -134,7 +171,6 @@ def prepare_update_record(
     record_id: str, username: str, data: Dict[str, Any], existing_fields: Dict[str, Any]
 ) -> Optional[Dict[str, Any]]:
     formatted_data = {}
-
     field_mapping = {
         "Username": "Username",
         "Full Name": "Full Name",
@@ -153,7 +189,6 @@ def prepare_update_record(
         new_value = data.get(data_field)
         if new_value and new_value != existing_fields.get(airtable_field):
             if airtable_field == "Created At":
-                # Ensure the date is in the correct format
                 try:
                     datetime.strptime(new_value, "%Y-%m-%d")
                     formatted_data[airtable_field] = new_value
@@ -162,46 +197,70 @@ def prepare_update_record(
             else:
                 formatted_data[airtable_field] = new_value
 
-    if formatted_data:
-        return {"id": record_id, "fields": formatted_data}
-    else:
+    if not formatted_data:
         logger.debug(f"No updateable data for {username}")
         return None
 
+    return {"id": record_id, "fields": formatted_data}
 
-def update_airtable(records_to_update: List[Dict[str, Any]]) -> None:
+
+def update_airtable(records_to_update: List[Dict], headers: Dict[str, str]) -> bool:
+    """
+    Bulk update records in Airtable in batches of 10.
+
+    Args:
+        records_to_update: List of record dictionaries to update.
+        headers: HTTP headers with authorization.
+
+    Returns:
+        True if all batches are successfully updated, False otherwise.
+    """
     if not records_to_update:
-        logger.debug("No records to update.")
-        return
+        logging.info("No records to update.")
+        return True
 
-    endpoint = f"https://api.airtable.com/v0/{BASE_ID}/{AIRTABLE_ACCOUNTS_TABLE}"
-    headers = {
-        "Authorization": f"Bearer {AIRTABLE_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    data = {"records": records_to_update, "typecast": True}
+    all_successful = True
+    for i in range(0, len(records_to_update), 10):
+        batch = records_to_update[i : i + 10]
+        try:
+            response = requests.patch(
+                f"https://api.airtable.com/v0/{BASE_ID}/{AIRTABLE_ACCOUNTS_TABLE}",
+                headers=headers,
+                json={"records": batch},
+            )
+            response.raise_for_status()
+            batch_response = response.json()
 
-    response = requests.patch(endpoint, json=data, headers=headers)
-    if response.status_code == 200:
-        logger.info(
-            f"Successfully updated {len(records_to_update)} records in Airtable."
-        )
-    else:
-        logger.error(
-            f"Failed to update Airtable: {response.status_code}, {response.text}"
-        )
+            updated = batch_response.get("updatedRecords", [])
+            created = batch_response.get("createdRecords", [])
+            errors = batch_response.get("errors", [])
+
+            logging.info(
+                f"Batch {i//10 +1}: Successfully updated {len(updated)} records, created {len(created)} records."
+            )
+            if errors:
+                logging.error(f"Batch {i//10 +1}: Encountered {len(errors)} errors.")
+                all_successful = False
+        except requests.HTTPError as e:
+            logging.error(
+                f"Failed to update batch {i//10 +1}: {e.response.status_code}, {e.response.text}"
+            )
+            all_successful = False
+        except Exception as e:
+            logging.error(
+                f"Unexpected error updating batch {i//10 +1}: {str(e)}", exc_info=True
+            )
+            all_successful = False
+    return all_successful
 
 
 def delete_airtable_record(record_id: str) -> None:
     endpoint = (
         f"https://api.airtable.com/v0/{BASE_ID}/{AIRTABLE_ACCOUNTS_TABLE}/{record_id}"
     )
-    headers = {
-        "Authorization": f"Bearer {AIRTABLE_API_KEY}",
-        "Content-Type": "application/json",
-    }
+
     try:
-        response = requests.delete(endpoint, headers=headers)
+        response = requests.delete(endpoint, headers=AIRTABLE_HEADERS)
         response.raise_for_status()
         logger.info(f"Successfully deleted record {record_id} from Airtable.")
     except requests.exceptions.HTTPError as http_err:
@@ -210,3 +269,119 @@ def delete_airtable_record(record_id: str) -> None:
         )
     except Exception as err:
         logger.error(f"An error occurred while deleting record {record_id}: {err}")
+
+
+def normalize_username(username: str) -> str:
+    return username.strip().lower()
+
+
+def batch_request(
+    url: str, headers: Dict[str, str], records: List[Dict], method
+) -> List[Dict]:
+    successful_records = []
+    BATCH_SIZE = 10
+    RATE_LIMIT_DELAY = 0.2  # 200ms between requests
+
+    for i in range(0, len(records), BATCH_SIZE):
+        batch = records[i : i + BATCH_SIZE]
+        try:
+            response = method(url, headers=headers, json={"records": batch})
+            response.raise_for_status()
+            successful_records.extend(response.json().get("records", []))
+            logging.debug(f"Successfully processed batch of {len(batch)} records.")
+            time.sleep(RATE_LIMIT_DELAY)
+        except requests.HTTPError as e:
+            logging.error(
+                f"Failed to process batch at index {i}: {e.response.status_code}"
+            )
+            logging.debug(f"Response content: {e.response.text}")
+            logging.debug(f"Failed batch: {batch}")
+
+    return successful_records
+
+
+def fetch_and_update_accounts(
+    usernames: Set[str], headers: Dict[str, str], accounts: Dict[str, str]
+) -> Dict[str, str]:
+    normalized_usernames = {normalize_username(username) for username in usernames}
+
+    formula = " OR ".join(
+        [f"LOWER({{Username}}) = '{uname}'" for uname in normalized_usernames]
+    )
+    if formula:
+        formula = f"OR({formula})"
+
+    existing_records = fetch_records_from_airtable(
+        AIRTABLE_ACCOUNTS_TABLE, headers, formula
+    )
+
+    for record in existing_records:
+        username = normalize_username(record["fields"].get("Username", ""))
+        if username:
+            accounts[username] = record["id"]
+            logging.debug(f"Found existing account: {username} -> {record['id']}")
+
+    missing_usernames = normalized_usernames - set(accounts.keys())
+    if missing_usernames:
+        logging.info(f"Creating {len(missing_usernames)} new accounts.")
+        new_entries = [{"fields": {"Username": uname}} for uname in missing_usernames]
+
+        created_records = batch_request(
+            f"https://api.airtable.com/v0/{BASE_ID}/{AIRTABLE_ACCOUNTS_TABLE}",
+            headers,
+            new_entries,
+            requests.post,
+        )
+
+        for record in created_records:
+            username = normalize_username(record["fields"].get("Username", ""))
+            if username:
+                accounts[username] = record["id"]
+                logging.debug(f"Created new account: {username} -> {record['id']}")
+
+    return accounts
+
+
+def fetch_existing_follows(
+    record_id: str, headers: Dict[str, str], record_id_to_username: Dict[str, str]
+) -> Set[str]:
+    """
+    Fetch existing follows for a given follower.
+
+    Args:
+        record_id: The record ID of the Follower in Airtable
+        headers: HTTP headers with authorization
+        record_id_to_username: Dictionary mapping record IDs to usernames
+
+    Returns:
+        Set of usernames that the follower is currently following
+    """
+    try:
+        response = requests.get(
+            f"https://api.airtable.com/v0/{BASE_ID}/{AIRTABLE_FOLLOWERS_TABLE}/{record_id}",
+            headers=headers,
+        )
+        response.raise_for_status()
+        record = response.json()
+        existing_account_ids = record["fields"].get("Account", [])
+        # Reverse map to usernames if needed
+        existing_usernames = {
+            record_id_to_username.get(acc_id, "").lower()
+            for acc_id in existing_account_ids
+        }
+        # Remove empty strings that might have been added due to missing mappings
+        existing_usernames.discard("")
+        logger.debug(
+            f"Found {len(existing_usernames)} existing follows for record {record_id}"
+        )
+        return existing_usernames
+    except requests.HTTPError as e:
+        logger.error(
+            f"Failed to fetch existing follows for record {record_id}: {e.response.text}"
+        )
+        return set()
+    except Exception as e:
+        logger.error(
+            f"Unexpected error fetching follows for record {record_id}: {str(e)}"
+        )
+        return set()

@@ -20,6 +20,9 @@ from utils.airtable import (
     prepare_update_record,
     update_airtable,
     delete_airtable_record,
+    fetch_existing_follows,
+    fetch_and_update_accounts,
+    update_followers_field,
 )
 
 # Set up logging
@@ -108,12 +111,21 @@ def parse_numeric_value(value: str) -> int:
         return 0
 
 
+def normalize_username(username: str) -> str:
+    """
+    Normalize the username to ensure consistency.
+    - Lowercase
+    - Strip leading/trailing whitespace
+    """
+    return username.strip().lower()
+
+
 @retry_with_backoff
 def scrape_twitter_profile(
     driver: webdriver.Chrome, username: str
 ) -> Union[Dict[str, Any], str, None]:
     """Scrape Twitter profile data."""
-    username = username.lower()  # Ensure username consistency
+    username = normalize_username(username)  # Ensures consistency
     logger.info(f"Attempting to scrape profile for {username}")
     try:
         driver.get(f"https://x.com/{username}")
@@ -216,8 +228,13 @@ def update_twitter_data(
     records_to_update = []
     enriched_data = {}
 
+    headers = {
+        "Authorization": f"Bearer {airtable_token}",
+        "Content-Type": "application/json",
+    }
+
     for record_id, username in unenriched_accounts:
-        username_lower = username.lower()  # Ensure username consistency
+        username_lower = normalize_username(username)  # Ensures consistency
         if get_user_details(username_lower):
             continue
 
@@ -228,14 +245,14 @@ def update_twitter_data(
                 isinstance(twitter_data, dict)
                 and twitter_data != DELETE_RECORD_INDICATOR
             ):
-                # Remove "Created At" if it's empty
+                # Clean data
                 if "Created At" in twitter_data and not twitter_data["Created At"]:
                     del twitter_data["Created At"]
 
                 update_user_details(username_lower, twitter_data)
                 enriched_data[username_lower] = twitter_data
                 updated_count += 1
-                logger.info(f"Added new data for {username_lower}")
+                logging.info(f"Added new data for {username_lower}")
 
                 # Prepare Airtable update
                 update_record = prepare_update_record(
@@ -248,15 +265,21 @@ def update_twitter_data(
             elif twitter_data == DELETE_RECORD_INDICATOR:
                 delete_airtable_record(record_id)
             else:
-                logger.warning(f"Failed to scrape data for {username_lower}")
+                logging.warning(f"Failed to scrape data for {username_lower}")
         except Exception as e:
-            logger.error(f"Error processing {username_lower}: {str(e)}", exc_info=True)
+            logging.error(f"Error processing {username_lower}: {str(e)}", exc_info=True)
 
     # Bulk update Airtable after scraping
     if records_to_update:
-        update_airtable(records_to_update)
-        logger.info(f"Updated {len(records_to_update)} records in Airtable.")
+        success = update_airtable(records_to_update, headers)
+        if success:
+            logging.info(
+                f"Updated {len(records_to_update)} records in Airtable successfully."
+            )
+        else:
+            logging.error("Some batches failed to update in Airtable.")
 
+    logging.info(f"Processed {updated_count} new handles for Twitter data enrichment.")
     return enriched_data
 
 
@@ -384,3 +407,56 @@ def random_delay(min_seconds: int, max_seconds: int) -> None:
     """Introduce a random delay between min_seconds and max_seconds."""
     delay = random.uniform(min_seconds, max_seconds)
     time.sleep(delay)
+
+
+def process_user(
+    username: str,
+    follower_record_id: str,
+    driver: webdriver.Chrome,
+    headers: Dict[str, str],
+    accounts: Dict[str, str],
+    record_id_to_username: Dict[str, str],
+) -> tuple[Dict[str, str], int]:
+    """
+    Process a user's following list and update Airtable accordingly.
+    """
+    existing_follows = fetch_existing_follows(
+        follower_record_id, headers, record_id_to_username
+    )
+    logging.info(f"Existing follows for {username}: {len(existing_follows)}")
+
+    new_follows = get_following(driver, username, existing_follows)
+    all_follows = {
+        normalize_username(uname) for uname in existing_follows.union(new_follows)
+    }
+    logging.info(f"Total follows for {username}: {len(all_follows)}")
+
+    # Update accounts dictionary with any new accounts
+    accounts = fetch_and_update_accounts(all_follows, headers, accounts)
+
+    # Get account IDs for all follows
+    followed_account_ids = []
+    missing_accounts = []
+    for uname in all_follows:
+        if uname in accounts:
+            followed_account_ids.append(accounts[uname])
+        else:
+            missing_accounts.append(uname)
+            logging.warning(f"Account not found: {uname}")
+
+    if missing_accounts:
+        logging.error(f"Missing accounts: {missing_accounts}")
+
+    # Update follower record with ALL account IDs
+    if followed_account_ids:
+        success = update_followers_field(
+            follower_record_id, followed_account_ids, headers
+        )
+        if success:
+            logging.info(
+                f"Successfully updated follower {username} with {len(followed_account_ids)} accounts."
+            )
+        else:
+            logging.error(f"Failed to update follower {username} with accounts.")
+
+    return accounts, len(new_follows)

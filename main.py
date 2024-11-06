@@ -29,6 +29,10 @@ env_vars = load_env_variables()
 BASE_ID = env_vars["airtable_base_id"]
 LOCK_FILE = "/tmp/your_script_lock"
 
+# Constants from environment variables
+FOLLOWERS_TABLE_ID = env_vars["airtable_followers_table"]
+ACCOUNTS_TABLE_ID = env_vars["airtable_accounts_table"]
+
 
 def acquire_lock():
     global lock_fd
@@ -47,11 +51,13 @@ def release_lock():
 
 
 def batch_request(url: str, headers: Dict[str, str], records: List[Dict], method):
+    results = []
     for i in range(0, len(records), 10):
         batch = records[i : i + 10]
         try:
             response = method(url, headers=headers, json={"records": batch})
             response.raise_for_status()
+            results.extend(response.json().get("records", []))
             logging.debug(
                 f"{method.__name__.capitalize()}d {len(batch)} entries in the {url.split('/')[-1]} table."
             )
@@ -60,6 +66,7 @@ def batch_request(url: str, headers: Dict[str, str], records: List[Dict], method
                 f"Failed to {method.__name__} entries in {url.split('/')[-1]} table. Status code: {e.response.status_code}"
             )
             logging.debug(f"Response content: {e.response.content.decode('utf-8')}")
+    return results
 
 
 def normalize_username(username: str) -> str:
@@ -69,47 +76,117 @@ def normalize_username(username: str) -> str:
 def fetch_and_update_accounts(
     usernames: Set[str], headers: Dict[str, str], accounts: Dict[str, str]
 ) -> Dict[str, str]:
+    """
+    Fetch or create accounts for all usernames, including existing ones not in accounts dict.
+    """
     normalized_usernames = {normalize_username(username) for username in usernames}
-    new_usernames = normalized_usernames - set(accounts.keys())
-    new_entries = [{"fields": {"Username": username}} for username in new_usernames]
-    if new_entries:
-        post_airtable_records(new_entries, "tblJCXhcrCxDUJR3F", headers)
-        updated_records = fetch_records_from_airtable("tblJCXhcrCxDUJR3F", headers)
-        accounts.update(
-            {
-                normalize_username(record["fields"]["Username"]): record["id"]
-                for record in updated_records
-                if "Username" in record["fields"]
-            }
+
+    # First, fetch ALL existing accounts from Airtable that match our usernames
+    formula = (
+        "OR("
+        + ",".join(
+            [f"LOWER({{Username}}) = '{username}'" for username in normalized_usernames]
         )
+        + ")"
+    )
+    existing_records = fetch_records_from_airtable(
+        "tblJCXhcrCxDUJR3F", headers, formula=formula  # Accounts table
+    )
+
+    # Update accounts dict with any existing accounts we didn't know about
+    for record in existing_records:
+        username = normalize_username(record["fields"].get("Username", ""))
+        if username:
+            accounts[username] = record["id"]
+            logging.debug(f"Found existing account: {username} -> {record['id']}")
+
+    # Now create any truly new accounts
+    new_usernames = normalized_usernames - set(accounts.keys())
+    if new_usernames:
+        logging.info(f"Creating {len(new_usernames)} new accounts")
+        new_entries = [{"fields": {"Username": username}} for username in new_usernames]
+
+        # Create new accounts in batches
+        created_records = batch_request(
+            f"https://api.airtable.com/v0/{BASE_ID}/tblJCXhcrCxDUJR3F",
+            headers,
+            new_entries,
+            requests.post,
+        )
+
+        # Update accounts dictionary with new records
+        if created_records:
+            for record in created_records:
+                username = normalize_username(record["fields"].get("Username", ""))
+                if username:
+                    accounts[username] = record["id"]
+                    logging.debug(f"Created new account: {username} -> {record['id']}")
+
     return accounts
 
 
 def fetch_existing_follows(
-    follower_record_id: str,
-    headers: Dict[str, str],
-    record_id_to_username: Dict[str, str],
+    record_id: str, headers: Dict[str, str], record_id_to_username: Dict[str, str]
 ) -> Set[str]:
-    url = (
-        f"https://api.airtable.com/v0/{BASE_ID}/tbl7bEfNVnCEQvUkT/{follower_record_id}"
-    )
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        data = response.json()
-        logging.debug(f"Fetched follower record {follower_record_id}: {data}")
-        linked_account_ids = data["fields"].get("Account", [])
-        follows = {
-            record_id_to_username.get(acc_id, "").lower()
-            for acc_id in linked_account_ids
-        }
-        logging.debug(f"Existing follows for follower {follower_record_id}: {follows}")
-        return follows
-    else:
-        logging.error(
-            f"Failed to fetch follower record {follower_record_id}. Status code: {response.status_code}"
+    """
+    Fetch existing follows for a given follower.
+    """
+    try:
+        response = requests.get(
+            f"https://api.airtable.com/v0/{BASE_ID}/{FOLLOWERS_TABLE_ID}/{record_id}",
+            headers=headers,
         )
-        logging.error(f"Response: {response.text}")
+        response.raise_for_status()
+        record = response.json()
+        existing_account_ids = record["fields"].get("Account", [])
+        # Reverse map to usernames if needed
+        existing_usernames = {
+            record_id_to_username.get(acc_id, "").lower()
+            for acc_id in existing_account_ids
+        }
+        return existing_usernames
+    except requests.HTTPError as e:
+        logging.error(
+            f"Failed to fetch existing follows for record {record_id}: {e.response.text}"
+        )
         return set()
+
+
+def prepare_follower_update(record_id: str, account_ids: List[str]) -> Dict:
+    """
+    Prepare the payload for updating a follower's Account field.
+    """
+    return {
+        "id": record_id,
+        "fields": {
+            "Account": account_ids  # Ensure this field is a Linked Record field in Airtable
+        },
+    }
+
+
+def update_airtable_followers(
+    follower_record_id: str, account_ids: List[str], headers: Dict[str, str]
+) -> bool:
+    """
+    Update the Followers table with the new list of account IDs.
+    """
+    follower_update = {"id": follower_record_id, "fields": {"Account": account_ids}}
+    try:
+        response = requests.patch(
+            f"https://api.airtable.com/v0/{BASE_ID}/{FOLLOWERS_TABLE_ID}",
+            headers=headers,
+            json={"records": [follower_update]},
+        )
+        response.raise_for_status()
+        logging.info(
+            f"Successfully updated follower {follower_record_id} with {len(account_ids)} accounts."
+        )
+        return True
+    except requests.HTTPError as e:
+        logging.error(
+            f"Failed to update follower {follower_record_id}: {e.response.text}"
+        )
+        return False
 
 
 def process_user(
@@ -120,26 +197,48 @@ def process_user(
     accounts: Dict[str, str],
     record_id_to_username: Dict[str, str],
 ) -> tuple[Dict[str, str], int]:
+    """
+    Process a user's following list and update Airtable accordingly.
+    """
     existing_follows = fetch_existing_follows(
         follower_record_id, headers, record_id_to_username
     )
-    new_follows = get_following(driver, username, existing_follows)
-    all_follows = {uname.lower() for uname in existing_follows.union(new_follows)}
+    logging.info(f"Existing follows for {username}: {len(existing_follows)}")
 
+    new_follows = get_following(driver, username, existing_follows)
+    all_follows = {
+        normalize_username(uname) for uname in existing_follows.union(new_follows)
+    }
+    logging.info(f"Total follows for {username}: {len(all_follows)}")
+
+    # Update accounts dictionary with any new accounts
     accounts = fetch_and_update_accounts(all_follows, headers, accounts)
 
-    followed_account_ids = [
-        accounts[uname] for uname in all_follows if uname in accounts
-    ]
+    # Get account IDs for all follows
+    followed_account_ids = []
+    missing_accounts = []
+    for uname in all_follows:
+        normalized_uname = normalize_username(uname)
+        if normalized_uname in accounts:
+            followed_account_ids.append(accounts[normalized_uname])
+        else:
+            missing_accounts.append(uname)
+            logging.warning(f"Account not found: {uname}")
 
-    follower_update = {
-        "id": follower_record_id,
-        "fields": {"Account": followed_account_ids},
-    }
-    update_airtable_records([follower_update], "tbl7bEfNVnCEQvUkT", headers)
+    if missing_accounts:
+        logging.error(f"Missing accounts: {missing_accounts}")
 
-    for account_id in followed_account_ids:
-        update_followers_field(account_id, follower_record_id, headers)
+    # Update follower record with ALL account IDs
+    if followed_account_ids:
+        success = update_airtable_followers(
+            follower_record_id, followed_account_ids, headers
+        )
+        if not success:
+            logging.error(f"Failed to update all accounts for follower {username}.")
+        else:
+            logging.info(
+                f"Successfully updated {username} with {len(followed_account_ids)} follows"
+            )
 
     return accounts, len(new_follows)
 
@@ -168,87 +267,72 @@ def process_list_members(
 
 
 def main():
-    # Do not call setup_logging() here
-    acquire_lock()
-    try:
-        logger = logging.getLogger(__name__)
-        logger.info("Main function started")
-        env_vars = load_env_variables()
-        headers = {"Authorization": f"Bearer {env_vars['airtable_token']}"}
-        twitter_headers = {
-            "Authorization": f"Bearer {env_vars['twitter_bearer_token']}"
-        }
-        cookie_path = env_vars.get("cookie_path")
-        list_members = fetch_list_members(env_vars["list_id"], twitter_headers)
-        if not list_members:
-            logger.error("Failed to fetch list members.")
-            return
+    # Set up logging
+    logging.basicConfig(
+        filename="main.log",
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+    logger = logging.getLogger(__name__)
 
-        existing_followers = fetch_records_from_airtable("tbl7bEfNVnCEQvUkT", headers)
+    try:
+        # Initialize the driver before the loop
+        driver = init_driver()
+        cookie_path = env_vars.get("cookie_path")
+        if cookie_path:
+            load_cookies(driver, cookie_path)
+            logger.info(f"Cookies loaded from {cookie_path}")
+
+        headers = {
+            "Authorization": f"Bearer {env_vars['airtable_token']}",
+            "Content-Type": "application/json",
+        }
+
+        # Fetch existing followers
+        existing_followers = fetch_records_from_airtable(FOLLOWERS_TABLE_ID, headers)
         followers = {
             record["fields"]["Username"].lower(): record["id"]
             for record in existing_followers
             if "Username" in record["fields"]
         }
 
-        existing_accounts = fetch_records_from_airtable("tblJCXhcrCxDUJR3F", headers)
+        # Fetch existing accounts
+        existing_accounts = fetch_records_from_airtable(ACCOUNTS_TABLE_ID, headers)
         accounts = {
             record["fields"]["Username"].lower(): record["id"]
             for record in existing_accounts
             if "Username" in record["fields"]
         }
+
         record_id_to_username = {
             record["id"]: record["fields"]["Username"].lower()
             for record in existing_accounts
             if "Username" in record["fields"]
         }
 
-        new_followers = [
-            {
-                "fields": {
-                    "Account ID": member["id"],
-                    "Username": member["username"],
-                }
-            }
-            for member in list_members
-            if member["username"].lower() not in followers
-        ]
-
-        if new_followers:
-            post_airtable_records(new_followers, "tbl7bEfNVnCEQvUkT", headers)
-            updated_followers = fetch_records_from_airtable(
-                "tbl7bEfNVnCEQvUkT", headers
-            )
-            followers.update(
-                {
-                    record["fields"]["Username"].lower(): record["id"]
-                    for record in updated_followers
-                    if "Username" in record["fields"]
-                }
-            )
-
-        driver = init_driver()
-
-        if cookie_path:
-            load_cookies(driver, cookie_path)
-            logger.info(f"Cookies loaded from {cookie_path}")
-        else:
-            logger.warning(
-                "COOKIE_PATH is not set in environment variables. Skipping cookie loading."
-            )
-
-        total_new_handles = process_list_members(
-            list_members, followers, driver, headers, accounts, record_id_to_username
-        )
-        logger.info(f"Total new handles found: {total_new_handles}")
-
-        fetch_profile_main()
-        scrape_empty_accounts_main()
+        # Process each follower
+        for username, record_id in followers.items():
+            try:
+                accounts, new_handles = process_user(
+                    username,
+                    record_id,
+                    driver,
+                    headers,
+                    accounts,
+                    record_id_to_username,
+                )
+                logger.info(f"Processed {new_handles} new handles for {username}.")
+            except Exception as e:
+                logger.error(
+                    f"Error processing follower {username}: {str(e)}", exc_info=True
+                )
 
     except Exception as e:
-        logger.exception("An error occurred during execution.")
+        logger.exception("An error occurred during execution")
     finally:
-        release_lock()
+        if "driver" in locals():
+            driver.quit()
+        logger.info("Main function completed.")
 
 
 if __name__ == "__main__":
