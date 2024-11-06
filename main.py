@@ -326,6 +326,8 @@ def main():
                 logger.error(
                     f"Error processing follower {username}: {str(e)}", exc_info=True
                 )
+        # Enrich new Accounts running scrape_empty_accounts.py
+        scrape_empty_accounts_main()
 
     except Exception as e:
         logger.exception("An error occurred during execution")

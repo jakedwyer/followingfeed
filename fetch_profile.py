@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import time
 from datetime import datetime
 from dotenv import load_dotenv
 from utils.airtable import update_airtable_records, fetch_records_from_airtable
@@ -14,16 +15,11 @@ from utils.logging_setup import setup_logging
 
 load_dotenv()
 
-# Remove or comment out the following lines
-# logging.basicConfig(
-#     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-# )
-
 # Initialize logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
-# Replace the existing BEARER_TOKEN and AIRTABLE_TOKEN assignments
+# Load environment variables
 env_vars = load_env_variables()
 BEARER_TOKEN = env_vars.get("twitter_bearer_token")
 AIRTABLE_TOKEN = env_vars.get("airtable_token")
@@ -45,6 +41,8 @@ def check_tokens():
 
 
 MAX_API_CALLS = 500
+API_CALLS_MADE = 0
+API_RETRY_LIMIT = 5  # Maximum number of retries for a single request
 
 
 # Define a custom exception for rate limiting
@@ -52,12 +50,14 @@ class RateLimitException(Exception):
     pass
 
 
-def fetch_profile(username):
+def fetch_profile(username, retries=0):
+    global API_CALLS_MADE
     if not BEARER_TOKEN:
         logger.error("BEARER_TOKEN is not set")
         return None
 
     try:
+        API_CALLS_MADE += 1
         user_data = fetch_twitter_data_api(username, bearer_token=BEARER_TOKEN)
         if not user_data:
             logger.error(f"No data returned for {username}")
@@ -65,10 +65,18 @@ def fetch_profile(username):
         return user_data
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 429:
-            logger.error(
-                f"Twitter API rate limit reached for {username}. Stopping the script."
+            retry_after = int(
+                e.response.headers.get("Retry-After", 60)
+            )  # Default to 60 seconds if not provided
+            logger.warning(
+                f"Rate limit reached. Retrying after {retry_after} seconds..."
             )
-            raise RateLimitException("Twitter API rate limit reached")
+            if retries < API_RETRY_LIMIT:
+                time.sleep(retry_after)
+                return fetch_profile(username, retries + 1)
+            else:
+                logger.error(f"Max retries exceeded for {username}. Skipping.")
+                raise RateLimitException("Twitter API rate limit reached")
         logger.error(f"HTTPError fetching profile for {username}: {e}")
     except Exception as e:
         logger.error(f"Error fetching profile for {username}: {e}")
@@ -178,13 +186,16 @@ def main():
                 TABLE_ID, {"Authorization": f"Bearer {AIRTABLE_TOKEN}"}
             )
             if not record["fields"].get("Account ID")
+            and (
+                not record["fields"].get("Full Name")
+                or not record["fields"].get("Description")
+            )
         ]
 
-        api_calls = 0
         updated_records = []
 
         for record in accounts_to_update:
-            if api_calls >= MAX_API_CALLS:
+            if API_CALLS_MADE >= MAX_API_CALLS:
                 logger.info(
                     f"Reached maximum of {MAX_API_CALLS} Twitter API calls. Stopping further profile fetches."
                 )
@@ -197,10 +208,14 @@ def main():
                 )
                 continue
 
-            profile = fetch_profile(username)  # May raise RateLimitException
+            try:
+                profile = fetch_profile(username)  # May raise RateLimitException
+            except RateLimitException as e:
+                logger.error(e)
+                logger.info("Exiting the script due to rate limit.")
+                sys.exit(1)
 
             if profile:
-                api_calls += 1
                 update_user_profile(username, profile)
                 updated_record = create_updated_record(record, profile)
                 if updated_record:
@@ -221,11 +236,14 @@ def main():
         else:
             logger.info("No records to update in Airtable")
 
-        logger.info(f"Total API calls made: {api_calls}")
+        logger.info(f"Total API calls made: {API_CALLS_MADE}")
 
     except RateLimitException as e:
         logger.error(e)
         logger.info("Exiting the script due to rate limit.")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"An unexpected error occurred: {e}")
         sys.exit(1)
 
 
