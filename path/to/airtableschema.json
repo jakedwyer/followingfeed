@@ -1,0 +1,67 @@
+{
+  "tables": [
+    {
+      "id": "tblJCXhcrCxDUJR3F",
+      "name": "Accounts",
+      "primaryFieldId": "fldQTZqbhLnvX4J4N",
+      "fields": [
+        {
+          "type": "singleLineText",
+          "id": "fldQTZqbhLnvX4J4N",
+          "name": "Username"
+        },
+        {
+          "type": "multipleRecordLinks",
+          "options": {
+            "linkedTableId": "tbl7bEfNVnCEQvUkT",
+            "isReversed": true,
+            "prefersSingleRecordLink": false,
+            "inverseLinkFieldId": "fldGbi3dD2dfUl7Qm"
+          },
+          "id": "fldFJDtUxHQkNerXE",
+          "name": "Followers"
+        },
+        // ... other fields ...
+      ],
+      "views": [
+        {
+          "id": "viwGBU2wpp6pW3B3g",
+          "name": "Grid view",
+          "type": "grid"
+        }
+      ]
+    },
+    {
+      "id": "tbl7bEfNVnCEQvUkT",
+      "name": "Followers",
+      "primaryFieldId": "fldzwVDGrXalAbvp7",
+      "fields": [
+        {
+          "type": "singleLineText",
+          "id": "fldzwVDGrXalAbvp7",
+          "name": "Username"
+        },
+        {
+          "type": "multipleRecordLinks",
+          "options": {
+            "linkedTableId": "tblJCXhcrCxDUJR3F",
+            "isReversed": false,
+            "prefersSingleRecordLink": false,
+            "inverseLinkFieldId": "fldFJDtUxHQkNerXE"
+          },
+          "id": "fldGbi3dD2dfUl7Qm",
+          "name": "Account"
+        },
+        // ... other fields ...
+      ],
+      "views": [
+        {
+          "id": "viwtqGAqMoyhF23oN",
+          "name": "Grid view",
+          "type": "grid"
+        }
+      ]
+    }
+    // ... other tables ...
+  ]
+} 
