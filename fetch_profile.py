@@ -170,6 +170,32 @@ def save_user_data(username: str, user_data: dict, json_file_path: str):
         logger.error(f"Error writing to {json_file_path}: {e}")
 
 
+def process_batch(updated_records):
+    """Process a batch of records and update Airtable"""
+    if not updated_records:  # Don't process empty batches
+        return []
+
+    try:
+        success = update_airtable_records(
+            updated_records, TABLE_ID, {"Authorization": f"Bearer {AIRTABLE_TOKEN}"}
+        )
+        if success:
+            logger.info(
+                f"Successfully updated batch of {len(updated_records)} records in Airtable"
+            )
+        else:
+            logger.error(
+                f"Failed to update batch of {len(updated_records)} records in Airtable"
+            )
+            # Log the records that failed to update
+            for record in updated_records:
+                logger.debug(f"Failed record ID: {record.get('id')}")
+    except Exception as e:
+        logger.error(f"Error processing batch: {e}")
+
+    return []  # Return empty list for next batch
+
+
 def main():
     try:
         if not check_tokens():
@@ -180,18 +206,17 @@ def main():
             logger.error("TABLE_ID is not set. Exiting the script.")
             return
 
-        accounts_to_update = [
-            record
-            for record in fetch_records_from_airtable(
-                TABLE_ID, {"Authorization": f"Bearer {AIRTABLE_TOKEN}"}
-            )
-            if not record["fields"].get("Account ID")
-            and (
-                not record["fields"].get("Full Name")
-                or not record["fields"].get("Description")
-            )
-        ]
+        # Add formula to filter at Airtable level instead of in Python
+        filter_formula = "AND(OR(NOT({Account ID}), NOT({Full Name}), NOT({Description})), NOT({Username}=''))"
+        accounts_to_update = fetch_records_from_airtable(
+            TABLE_ID,
+            {"Authorization": f"Bearer {AIRTABLE_TOKEN}"},
+            filter_formula,  # Remove max_records parameter
+        )[
+            :MAX_API_CALLS
+        ]  # Limit the records after fetching
 
+        BATCH_SIZE = 10  # Process in smaller batches
         updated_records = []
 
         for record in accounts_to_update:
@@ -199,6 +224,9 @@ def main():
                 logger.info(
                     f"Reached maximum of {MAX_API_CALLS} Twitter API calls. Stopping further profile fetches."
                 )
+                # Process final batch before breaking
+                if updated_records:
+                    process_batch(updated_records)
                 break
 
             username = record["fields"].get("Username")
@@ -209,8 +237,11 @@ def main():
                 continue
 
             try:
-                profile = fetch_profile(username)  # May raise RateLimitException
+                profile = fetch_profile(username)
             except RateLimitException as e:
+                # Process any remaining records before exiting
+                if updated_records:
+                    process_batch(updated_records)
                 logger.error(e)
                 logger.info("Exiting the script due to rate limit.")
                 sys.exit(1)
@@ -220,21 +251,18 @@ def main():
                 updated_record = create_updated_record(record, profile)
                 if updated_record:
                     updated_records.append(updated_record)
+
+                    # Process batch when it reaches BATCH_SIZE
+                    if len(updated_records) >= BATCH_SIZE:
+                        updated_records = process_batch(updated_records)
             else:
                 logger.warning(
                     f"Failed to fetch profile for {username}. Skipping Airtable update."
                 )
 
+        # Process any remaining records in the final batch
         if updated_records:
-            success = update_airtable_records(
-                updated_records, TABLE_ID, {"Authorization": f"Bearer {AIRTABLE_TOKEN}"}
-            )
-            if success:
-                logger.info(f"Updated {len(updated_records)} records in Airtable")
-            else:
-                logger.error("Failed to update some records in Airtable")
-        else:
-            logger.info("No records to update in Airtable")
+            process_batch(updated_records)
 
         logger.info(f"Total API calls made: {API_CALLS_MADE}")
 

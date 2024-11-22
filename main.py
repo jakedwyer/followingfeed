@@ -23,11 +23,13 @@ from scraping.scraping import (
 )
 from scrape_empty_accounts import main as scrape_empty_accounts_main
 from fetch_profile import main as fetch_profile_main
+import os
 
 # Global constants
 env_vars = load_env_variables()
 BASE_ID = env_vars["airtable_base_id"]
-LOCK_FILE = "/tmp/your_script_lock"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+LOCK_FILE = "/tmp/followfeed_script.lock"
 
 # Constants from environment variables
 FOLLOWERS_TABLE_ID = env_vars["airtable_followers_table"]
@@ -114,7 +116,7 @@ def fetch_and_update_accounts(
             requests.post,
         )
 
-        # Update accounts dictionary with new records
+        # Only successfully created accounts are added
         if created_records:
             for record in created_records:
                 username = normalize_username(record["fields"].get("Username", ""))
@@ -239,6 +241,12 @@ def process_user(
             logging.info(
                 f"Successfully updated {username} with {len(followed_account_ids)} follows"
             )
+
+    logging.info(f"Raw new follows found: {len(new_follows)}")
+    logging.info(f"Normalized unique follows: {len(all_follows)}")
+    logging.info(f"Successfully linked accounts: {len(followed_account_ids)}")
+    if len(all_follows) != len(followed_account_ids):
+        logging.info(f"Difference due to {len(missing_accounts)} missing accounts")
 
     return accounts, len(new_follows)
 
