@@ -6,30 +6,37 @@ setup_logging()  # Initialize logging before other imports
 import requests
 import sys
 import fcntl
-from typing import Dict, List, Set
+from typing import Dict, List, Set, Optional, Any
 from selenium import webdriver
+from selenium.webdriver.remote.webdriver import (
+    WebDriver,
+)  # Standardized WebDriver import
 from utils.airtable import (
     fetch_records_from_airtable,
-    post_airtable_records,
-    update_airtable_records,
-    update_followers_field,
+    update_airtable_followers,
+    fetch_existing_follows,
+    fetch_and_update_accounts,
+    update_airtable,
 )
+from utils.helpers import normalize_username, prepare_update_record
 from utils.config import load_env_variables
+from utils.twitter_helpers import get_following
 from twitter.twitter import fetch_list_members
-from scraping.scraping import (
-    init_driver,
-    load_cookies,
-    get_following,
-)
 from scrape_empty_accounts import main as scrape_empty_accounts_main
-from fetch_profile import main as fetch_profile_main
+from airtop import (
+    Airtop as AirtopClient,
+    SessionConfig,
+)  # Correctly import AirtopClient
+from utils.airtop_selenium import (
+    init_airtop_driver,
+    cleanup_airtop_session,
+)  # Ensure correct import
+import json
 
 # Global constants
 env_vars = load_env_variables()
 BASE_ID = env_vars["airtable_base_id"]
 LOCK_FILE = "/tmp/your_script_lock"
-
-# Constants from environment variables
 FOLLOWERS_TABLE_ID = env_vars["airtable_followers_table"]
 ACCOUNTS_TABLE_ID = env_vars["airtable_accounts_table"]
 
@@ -69,130 +76,60 @@ def batch_request(url: str, headers: Dict[str, str], records: List[Dict], method
     return results
 
 
-def normalize_username(username: str) -> str:
-    return username.strip().lower()
+def process_list_members(
+    list_members, followers, driver, headers, accounts, record_id_to_username
+):
+    total_new_handles = 0
+    for member in list_members:
+        username = member["username"].lower()
+        record_id = followers.get(username)
+        if record_id:
+            try:
+                accounts, new_handles = process_user(
+                    username,
+                    record_id,
+                    driver,
+                    headers,
+                    accounts,
+                    record_id_to_username,
+                )
+                total_new_handles += new_handles
+            except Exception as e:
+                logging.error(f"Error processing {username}: {e}")
+    return total_new_handles
 
 
-def fetch_and_update_accounts(
-    usernames: Set[str], headers: Dict[str, str], accounts: Dict[str, str]
-) -> Dict[str, str]:
-    """
-    Fetch or create accounts for all usernames, including existing ones not in accounts dict.
-    """
-    normalized_usernames = {normalize_username(username) for username in usernames}
-
-    # First, fetch ALL existing accounts from Airtable that match our usernames
-    formula = (
-        "OR("
-        + ",".join(
-            [f"LOWER({{Username}}) = '{username}'" for username in normalized_usernames]
-        )
-        + ")"
-    )
-    existing_records = fetch_records_from_airtable(
-        "tblJCXhcrCxDUJR3F", headers, formula=formula  # Accounts table
-    )
-
-    # Update accounts dict with any existing accounts we didn't know about
-    for record in existing_records:
-        username = normalize_username(record["fields"].get("Username", ""))
-        if username:
-            accounts[username] = record["id"]
-            logging.debug(f"Found existing account: {username} -> {record['id']}")
-
-    # Now create any truly new accounts
-    new_usernames = normalized_usernames - set(accounts.keys())
-    if new_usernames:
-        logging.info(f"Creating {len(new_usernames)} new accounts")
-        new_entries = [{"fields": {"Username": username}} for username in new_usernames]
-
-        # Create new accounts in batches
-        created_records = batch_request(
-            f"https://api.airtable.com/v0/{BASE_ID}/tblJCXhcrCxDUJR3F",
-            headers,
-            new_entries,
-            requests.post,
-        )
-
-        # Update accounts dictionary with new records
-        if created_records:
-            for record in created_records:
-                username = normalize_username(record["fields"].get("Username", ""))
-                if username:
-                    accounts[username] = record["id"]
-                    logging.debug(f"Created new account: {username} -> {record['id']}")
-
-    return accounts
-
-
-def fetch_existing_follows(
-    record_id: str, headers: Dict[str, str], record_id_to_username: Dict[str, str]
-) -> Set[str]:
-    """
-    Fetch existing follows for a given follower.
-    """
+def scrape_with_airtop(username: str, driver, client, session, window_info):
     try:
-        response = requests.get(
-            f"https://api.airtable.com/v0/{BASE_ID}/{FOLLOWERS_TABLE_ID}/{record_id}",
-            headers=headers,
+        # Navigate to profile
+        driver.get(f"https://x.com/{username}")
+
+        # Use Airtop's AI scraping
+        scrape_result = client.windows.scrape_content(
+            session_id=session.data.id,
+            window_id=window_info.data.window_id,
+            time_threshold_seconds=30,
         )
-        response.raise_for_status()
-        record = response.json()
-        existing_account_ids = record["fields"].get("Account", [])
-        # Reverse map to usernames if needed
-        existing_usernames = {
-            record_id_to_username.get(acc_id, "").lower()
-            for acc_id in existing_account_ids
-        }
-        return existing_usernames
-    except requests.HTTPError as e:
-        logging.error(
-            f"Failed to fetch existing follows for record {record_id}: {e.response.text}"
-        )
-        return set()
+
+        return scrape_result.data.model_response
+    except Exception as e:
+        logging.error(f"Failed to scrape {username}: {e}")
+        return None
 
 
-def prepare_follower_update(record_id: str, account_ids: List[str]) -> Dict:
-    """
-    Prepare the payload for updating a follower's Account field.
-    """
-    return {
-        "id": record_id,
-        "fields": {
-            "Account": account_ids  # Ensure this field is a Linked Record field in Airtable
-        },
-    }
-
-
-def update_airtable_followers(
-    follower_record_id: str, account_ids: List[str], headers: Dict[str, str]
-) -> bool:
-    """
-    Update the Followers table with the new list of account IDs.
-    """
-    follower_update = {"id": follower_record_id, "fields": {"Account": account_ids}}
-    try:
-        response = requests.patch(
-            f"https://api.airtable.com/v0/{BASE_ID}/{FOLLOWERS_TABLE_ID}",
-            headers=headers,
-            json={"records": [follower_update]},
-        )
-        response.raise_for_status()
-        logging.info(
-            f"Successfully updated follower {follower_record_id} with {len(account_ids)} accounts."
-        )
-        return True
-    except requests.HTTPError as e:
-        logging.error(
-            f"Failed to update follower {follower_record_id}: {e.response.text}"
-        )
-        return False
+def fetch_profile(
+    username: str, driver, client: AirtopClient, session, window_info
+) -> Optional[Dict[str, Any]]:
+    profile_data = scrape_with_airtop(username, driver, client, session, window_info)
+    if profile_data:
+        return dict(profile_data)  # Convert ScrapeResponseOutput to dictionary
+    return None
 
 
 def process_user(
     username: str,
     follower_record_id: str,
-    driver: webdriver.Chrome,
+    driver: WebDriver,
     headers: Dict[str, str],
     accounts: Dict[str, str],
     record_id_to_username: Dict[str, str],
@@ -243,98 +180,161 @@ def process_user(
     return accounts, len(new_follows)
 
 
-def process_list_members(
-    list_members, followers, driver, headers, accounts, record_id_to_username
-):
-    total_new_handles = 0
-    for member in list_members:
-        username = member["username"].lower()
-        record_id = followers.get(username)
-        if record_id:
-            try:
-                accounts, new_handles = process_user(
-                    username,
-                    record_id,
-                    driver,
-                    headers,
-                    accounts,
-                    record_id_to_username,
-                )
-                total_new_handles += new_handles
-            except Exception as e:
-                logging.error(f"Error processing {username}: {e}")
-    return total_new_handles
+def update_user_profile(
+    username: str,
+    profile: Dict[str, Any],
+    accounts: Dict[str, str],
+    headers: Dict[str, str],
+) -> None:
+    """
+    Update a user's profile in Airtable.
+
+    Args:
+        username (str): The username of the profile to update
+        profile (Dict[str, Any]): The profile data to update
+        accounts (Dict[str, str]): Mapping of usernames to Airtable record IDs
+        headers (Dict[str, str]): Headers for Airtable API requests
+    """
+    try:
+        normalized_username = normalize_username(username)
+        record_id = accounts.get(normalized_username)
+
+        if not record_id:
+            logging.error(f"No Airtable record found for username: {username}")
+            return
+
+        # Get existing record to compare fields
+        response = requests.get(
+            f"https://api.airtable.com/v0/{BASE_ID}/{ACCOUNTS_TABLE_ID}/{record_id}",
+            headers=headers,
+        )
+        response.raise_for_status()
+        existing_record = response.json()
+        existing_fields = existing_record.get("fields", {})
+
+        # Prepare update payload
+        update_record = prepare_update_record(
+            record_id=record_id,
+            username=username,
+            data=profile,
+            existing_fields=existing_fields,
+        )
+
+        if update_record:
+            response = requests.patch(
+                f"https://api.airtable.com/v0/{BASE_ID}/{ACCOUNTS_TABLE_ID}",
+                headers=headers,
+                json={"records": [update_record]},
+            )
+            response.raise_for_status()
+            logging.info(f"Successfully updated profile for {username}")
+        else:
+            logging.info(f"No updates needed for {username}")
+
+    except requests.HTTPError as e:
+        logging.error(f"Failed to update profile for {username}: {e.response.text}")
+    except Exception as e:
+        logging.error(f"Error updating profile for {username}: {str(e)}")
 
 
 def main():
-    # Set up logging
-    logging.basicConfig(
-        filename="main.log",
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
     logger = logging.getLogger(__name__)
 
     try:
-        # Initialize the driver before the loop
-        driver = init_driver()
-        cookie_path = env_vars.get("cookie_path")
-        if cookie_path:
-            load_cookies(driver, cookie_path)
-            logger.info(f"Cookies loaded from {cookie_path}")
+        acquire_lock()
 
-        headers = {
-            "Authorization": f"Bearer {env_vars['airtable_token']}",
-            "Content-Type": "application/json",
-        }
+        # Initialize Airtop Client with proper configuration
+        client = AirtopClient(api_key=env_vars["airtop_api_key"])
 
-        # Fetch existing followers
-        existing_followers = fetch_records_from_airtable(FOLLOWERS_TABLE_ID, headers)
-        followers = {
-            record["fields"]["Username"].lower(): record["id"]
-            for record in existing_followers
-            if "Username" in record["fields"]
-        }
+        # Create Airtop session with specific parameters
+        session = client.sessions.create(
+            configuration=SessionConfig(
+                base_profile_id=env_vars["airtop_profile"],
+                timeout_minutes=30,  # Increase timeout
+                skip_wait_session_ready=False,  # Ensure session is ready
+            )
+        )
 
-        # Fetch existing accounts
-        existing_accounts = fetch_records_from_airtable(ACCOUNTS_TABLE_ID, headers)
-        accounts = {
-            record["fields"]["Username"].lower(): record["id"]
-            for record in existing_accounts
-            if "Username" in record["fields"]
-        }
+        try:
+            # Initialize the Airtop-Selenium driver with retries
+            driver, window_info = init_airtop_driver(
+                env_vars["airtop_api_key"], client, session, max_retries=3
+            )
 
-        record_id_to_username = {
-            record["id"]: record["fields"]["Username"].lower()
-            for record in existing_accounts
-            if "Username" in record["fields"]
-        }
+            # Set up headers for Airtable
+            headers = {
+                "Authorization": f"Bearer {env_vars['airtable_token']}",
+                "Content-Type": "application/json",
+            }
 
-        # Process each follower
-        for username, record_id in followers.items():
-            try:
-                accounts, new_handles = process_user(
-                    username,
-                    record_id,
-                    driver,
-                    headers,
-                    accounts,
-                    record_id_to_username,
-                )
-                logger.info(f"Processed {new_handles} new handles for {username}.")
-            except Exception as e:
-                logger.error(
-                    f"Error processing follower {username}: {str(e)}", exc_info=True
-                )
-        # Enrich new Accounts running scrape_empty_accounts.py
-        scrape_empty_accounts_main()
+            # Fetch existing followers
+            existing_followers = fetch_records_from_airtable(
+                FOLLOWERS_TABLE_ID, headers
+            )
+            followers = {
+                record["fields"]["Username"].lower(): record["id"]
+                for record in existing_followers
+                if "Username" in record["fields"]
+            }
+
+            # Fetch existing accounts
+            existing_accounts = fetch_records_from_airtable(ACCOUNTS_TABLE_ID, headers)
+            accounts = {
+                record["fields"]["Username"].lower(): record["id"]
+                for record in existing_accounts
+                if "Username" in record["fields"]
+            }
+
+            record_id_to_username = {
+                record["id"]: record["fields"]["Username"].lower()
+                for record in existing_accounts
+                if "Username" in record["fields"]
+            }
+
+            # Process each follower
+            for username, record_id in followers.items():
+                try:
+                    accounts, new_handles = process_user(
+                        username,
+                        record_id,
+                        driver,
+                        headers,
+                        accounts,
+                        record_id_to_username,
+                    )
+                    logger.info(f"Processed {new_handles} new handles for {username}.")
+                except Exception as e:
+                    logger.error(
+                        f"Error processing follower {username}: {str(e)}", exc_info=True
+                    )
+            # Enrich new Accounts running scrape_empty_accounts.py
+            scrape_empty_accounts_main()
+
+            # Example usage of the new fetch_profile
+            # You might want to parameterize this or remove in production
+            username = "exampleuser"
+            profile = fetch_profile(
+                username, driver, client, session, window_info
+            )  # Pass client, session, window_info as parameters
+            if profile:
+                update_user_profile(
+                    username, profile, accounts, headers
+                )  # Pass accounts and headers as parameters
+                # Continue with updating Airtable records as per your existing logic
+
+        finally:
+            # Clean up resources
+            if "driver" in locals():
+                driver.quit()
+
+            # Always terminate the Airtop session
+            client.sessions.terminate(session.data.id)
 
     except Exception as e:
-        logger.exception("An error occurred during execution")
+        logger.error(f"An unexpected error occurred: {e}")
+        sys.exit(1)
     finally:
-        if "driver" in locals():
-            driver.quit()
-        logger.info("Main function completed.")
+        release_lock()
 
 
 if __name__ == "__main__":

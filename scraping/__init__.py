@@ -1,21 +1,15 @@
+"""Scraping functionality for the Twitter Network Analysis project."""
+
 from .scraping import (
     init_driver,
     load_cookies,
-    update_twitter_data,
-    get_following,
-    clean_text,
-    parse_date,
-    parse_numeric_value,
-    DELETE_RECORD_INDICATOR,
+    scrape_twitter_profile,
+    process_user,
 )
 
 __all__ = [
     "init_driver",
     "load_cookies",
-    "update_twitter_data",
-    "get_following",
-    "clean_text",
-    "parse_date",
-    "parse_numeric_value",
-    "DELETE_RECORD_INDICATOR",
+    "scrape_twitter_profile",
+    "process_user",
 ]

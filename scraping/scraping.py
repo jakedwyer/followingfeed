@@ -7,7 +7,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
-from typing import Dict, List, Tuple, Optional, Any, Union
+from typing import Dict, List, Tuple, Optional, Any, Union, Set
 from datetime import datetime
 import time
 import random
@@ -15,15 +15,21 @@ import pickle
 import unicodedata
 import re
 from fake_useragent import UserAgent
-from utils.user_data import update_user_details, get_user_details
-from utils.airtable import (
+from utils.helpers import (
+    normalize_username,
     prepare_update_record,
+)
+from utils.airtable import (
     update_airtable,
     delete_airtable_record,
     fetch_existing_follows,
+    update_airtable_followers,
     fetch_and_update_accounts,
-    update_followers_field,
 )
+from utils.user_data import get_user_details, update_user_details
+from airtop import Airtop
+from selenium.webdriver.remote.webdriver import WebDriver
+from utils.airtop_selenium import init_airtop_driver
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -109,15 +115,6 @@ def parse_numeric_value(value: str) -> int:
         return int(float(value))
     except ValueError:
         return 0
-
-
-def normalize_username(username: str) -> str:
-    """
-    Normalize the username to ensure consistency.
-    - Lowercase
-    - Strip leading/trailing whitespace
-    """
-    return username.strip().lower()
 
 
 @retry_with_backoff
@@ -306,8 +303,8 @@ def init_driver() -> webdriver.Chrome:
     return driver
 
 
-def load_cookies(driver: webdriver.Chrome, cookie_path: str) -> None:
-    """Load cookies into Selenium WebDriver."""
+def load_cookies(driver: webdriver.Remote, cookie_path: str) -> None:
+    """Load cookies into Airtop-Selenium WebDriver."""
     try:
         with open(cookie_path, "rb") as file:
             cookies = pickle.load(file)
@@ -317,14 +314,14 @@ def load_cookies(driver: webdriver.Chrome, cookie_path: str) -> None:
 
         loaded_cookies = 0
         for cookie in cookies:
-            cookie.pop("domain", None)
+            cookie.pop("domain", None)  # Remove domain to avoid conflicts
             try:
                 driver.add_cookie(cookie)
                 loaded_cookies += 1
             except Exception as e:
                 logger.warning(f"Failed to add cookie: {str(e)}")
 
-        logger.info(f"Loaded {loaded_cookies} cookies into WebDriver.")
+        logger.info(f"Loaded {loaded_cookies} cookies into Airtop WebDriver.")
         driver.refresh()
     except FileNotFoundError:
         logger.error(f"Cookie file not found at {cookie_path}")
@@ -334,11 +331,11 @@ def load_cookies(driver: webdriver.Chrome, cookie_path: str) -> None:
 
 @retry_with_backoff
 def get_following(
-    driver: webdriver.Chrome,
+    driver: WebDriver,
     handle: str,
-    existing_follows: set,
+    existing_follows: Set[str],
     max_accounts: Optional[int] = None,
-) -> List[str]:
+) -> Set[str]:
     """Fetch following accounts for a specific user using Selenium."""
     handle = handle.lower()  # Ensure username consistency
     url = f"https://x.com/{handle}/following"
@@ -354,7 +351,7 @@ def get_following(
         screenshot_path = f"screenshots/{handle}_following.png"
         driver.save_screenshot(screenshot_path)
         logger.info(f"Screenshot saved at {screenshot_path}")
-        return list(existing_follows)
+        return set(existing_follows)
 
     extracted_handles = set(existing_follows)
     logger.info(f"Existing handles: {len(existing_follows)}")
@@ -400,7 +397,7 @@ def get_following(
             exc_info=True,
         )
 
-    return list(extracted_handles)
+    return set(extracted_handles)
 
 
 def random_delay(min_seconds: int, max_seconds: int) -> None:
@@ -438,8 +435,9 @@ def process_user(
     followed_account_ids = []
     missing_accounts = []
     for uname in all_follows:
-        if uname in accounts:
-            followed_account_ids.append(accounts[uname])
+        normalized_uname = normalize_username(uname)
+        if normalized_uname in accounts:
+            followed_account_ids.append(accounts[normalized_uname])
         else:
             missing_accounts.append(uname)
             logging.warning(f"Account not found: {uname}")
@@ -449,14 +447,14 @@ def process_user(
 
     # Update follower record with ALL account IDs
     if followed_account_ids:
-        success = update_followers_field(
+        success = update_airtable_followers(
             follower_record_id, followed_account_ids, headers
         )
-        if success:
-            logging.info(
-                f"Successfully updated follower {username} with {len(followed_account_ids)} accounts."
-            )
+        if not success:
+            logging.error(f"Failed to update all accounts for follower {username}.")
         else:
-            logging.error(f"Failed to update follower {username} with accounts.")
+            logging.info(
+                f"Successfully updated {username} with {len(followed_account_ids)} follows"
+            )
 
     return accounts, len(new_follows)

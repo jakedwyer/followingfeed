@@ -34,5 +34,16 @@ def load_env_variables():
         "lock_file": os.getenv("LOCK_FILE"),
         "venv_path": os.getenv("VENV_PATH"),
         "log_file": os.getenv("LOG_FILE"),
+        "airtop_api_key": os.getenv("AIRTOP_API_KEY"),
+        "airtop_session_data": os.getenv("AIRTOP_SESSION_DATA"),
+        "airtop_profile": os.getenv("AIRTOP_PROFILE"),
     }
+
+    # Optionally, add checks to ensure all required variables are loaded
+    missing_vars = [key for key, value in env_vars.items() if value is None]
+    if missing_vars:
+        raise EnvironmentError(
+            f"Missing environment variables: {', '.join(missing_vars)}"
+        )
+
     return env_vars

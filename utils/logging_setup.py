@@ -1,27 +1,25 @@
 import logging
-from logging.handlers import RotatingFileHandler
-import os
+import sys
+from pathlib import Path
 
 
 def setup_logging():
-    logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    """Configure logging for the application."""
+    # Create logs directory if it doesn't exist
+    log_dir = Path("logs")
+    log_dir.mkdir(exist_ok=True)
 
-    # Remove all existing handlers
-    for handler in logger.handlers[:]:
-        logger.removeHandler(handler)
-
-    # File handler
-    file_handler = logging.FileHandler("main.log")
-    file_handler.setLevel(logging.INFO)
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.FileHandler(log_dir / "main.log"),
+            logging.StreamHandler(sys.stdout),
+        ],
     )
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
 
-    # Console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
+    # Set specific log levels for noisy libraries
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("selenium").setLevel(logging.WARNING)
+    logging.getLogger("webdriver_manager").setLevel(logging.WARNING)

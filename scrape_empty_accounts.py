@@ -13,6 +13,7 @@ from pyairtable import Api
 from utils.config import load_env_variables
 from utils.airtable import (
     fetch_records_from_airtable,
+    update_airtable,
     airtable_api_request,
 )
 from utils.logging_setup import setup_logging
