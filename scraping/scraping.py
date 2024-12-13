@@ -145,8 +145,9 @@ def scrape_twitter_profile(
                     EC.presence_of_element_located((By.CSS_SELECTOR, selector))
                 )
                 if get_attribute:
-                    return clean_text(element.get_attribute(get_attribute))
-                return clean_text(element.text)
+                    attr_value = element.get_attribute(get_attribute)
+                    return clean_text(attr_value) if attr_value is not None else None
+                return clean_text(element.text) if element.text is not None else None
             except (NoSuchElementException, TimeoutException):
                 logger.warning(f"Element not found: {selector}")
                 return None
@@ -286,7 +287,7 @@ def update_twitter_data(
 def init_driver() -> webdriver.Chrome:
     """Initialize and configure Chrome WebDriver."""
     options = Options()
-    options.headless = True
+    options.add_argument("--headless=new")  # New headless mode
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
