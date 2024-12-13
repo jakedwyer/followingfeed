@@ -19,24 +19,23 @@ wheels/
 .installed.cfg
 *.egg
 
-# Virtual Environments - comprehensive
+# Virtual Environments
 .env/
 .venv/
 venv/
 ENV/
 env/
 xfeed/
-.Python
-pyvenv.cfg
-.env
-.venv
-env/
-venv/
-ENV/
 env.bak/
 venv.bak/
 pythonenv*
 .python-version
+pyvenv.cfg
+
+# Environment Variables
+.env
+.env.*
+!.env.example
 
 # IDE / Editor
 .vscode/
@@ -89,9 +88,4 @@ output.zip
 *.so
 *.dll
 *.dylib
-
-# Environment files
-.env
-.env.*
-!.env.example
 
