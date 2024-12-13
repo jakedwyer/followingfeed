@@ -5,6 +5,7 @@ selenium
 webdriver-manager
 pandas
 datetime
-logging
 openai
 pyairtable
+filelock
+fake-useragent

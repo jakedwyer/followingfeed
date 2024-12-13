@@ -5,6 +5,8 @@ from typing import Dict, List, Any, Optional, Set
 from utils.config import load_env_variables
 from datetime import datetime
 import time
+import os
+import pickle
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +21,169 @@ AIRTABLE_HEADERS = {
     "Authorization": f"Bearer {AIRTABLE_API_KEY}",
     "Content-Type": "application/json",
 }
+
+# Cache settings
+CACHE_DIR = ".cache"
+ACCOUNTS_CACHE_FILE = os.path.join(CACHE_DIR, "accounts_cache.pkl")
+CACHE_EXPIRY_HOURS = 24  # Cache expires after 24 hours
+
+
+def load_cached_accounts() -> Optional[Dict[str, Dict]]:
+    """Load cached accounts if available and not expired."""
+    try:
+        if not os.path.exists(ACCOUNTS_CACHE_FILE):
+            return None
+
+        # Check if cache is expired
+        cache_mtime = os.path.getmtime(ACCOUNTS_CACHE_FILE)
+        if (time.time() - cache_mtime) > (CACHE_EXPIRY_HOURS * 3600):
+            logger.info("Accounts cache has expired")
+            return None
+
+        with open(ACCOUNTS_CACHE_FILE, "rb") as f:
+            cache = pickle.load(f)
+            logger.info(f"Loaded {len(cache)} accounts from cache")
+            return cache
+    except Exception as e:
+        logger.error(f"Error loading accounts cache: {str(e)}")
+        return None
+
+
+def save_accounts_cache(accounts: Dict[str, Dict]) -> None:
+    """Save accounts to cache."""
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        with open(ACCOUNTS_CACHE_FILE, "wb") as f:
+            pickle.dump(accounts, f)
+        logger.info(f"Saved {len(accounts)} accounts to cache")
+    except Exception as e:
+        logger.error(f"Error saving accounts cache: {str(e)}")
+
+
+def fetch_accounts_by_usernames(
+    usernames: Set[str], headers: Dict[str, str]
+) -> Dict[str, Dict]:
+    """Fetch only the accounts that match the given usernames."""
+    normalized_usernames = {username.lower() for username in usernames}
+
+    # First check cache
+    cached_accounts = load_cached_accounts() or {}
+
+    # Filter out usernames we already have in cache
+    missing_usernames = {
+        username for username in normalized_usernames if username not in cached_accounts
+    }
+
+    if not missing_usernames:
+        logger.info("All requested accounts found in cache")
+        return {
+            username: cached_accounts[username]
+            for username in normalized_usernames
+            if username in cached_accounts
+        }
+
+    # Fetch only missing accounts from Airtable
+    formula = " OR ".join(
+        [f"LOWER({{Username}}) = '{username}'" for username in missing_usernames]
+    )
+    if formula:
+        formula = f"OR({formula})"
+
+    new_accounts = {}
+    records = fetch_records_from_airtable(AIRTABLE_ACCOUNTS_TABLE, headers, formula)
+
+    for record in records:
+        username = record["fields"].get("Username", "").lower()
+        if username:
+            new_accounts[username] = record
+            cached_accounts[username] = record
+
+    # Update cache with new accounts
+    save_accounts_cache(cached_accounts)
+
+    # Return only the requested accounts
+    return {
+        username: cached_accounts[username]
+        for username in normalized_usernames
+        if username in cached_accounts
+    }
+
+
+def fetch_and_update_accounts(
+    usernames: Set[str], headers: Dict[str, str], accounts: Dict[str, str]
+) -> Dict[str, str]:
+    """
+    Fetch or create accounts using Airtable's upsert functionality.
+    Now with caching support.
+    """
+    normalized_usernames = {normalize_username(username) for username in usernames}
+
+    # First, try to get accounts from cache/Airtable
+    existing_accounts = fetch_accounts_by_usernames(normalized_usernames, headers)
+
+    # Update our accounts dictionary with what we found
+    for username, record in existing_accounts.items():
+        accounts[username] = record["id"]
+
+    # Determine which accounts we need to create
+    missing_usernames = normalized_usernames - set(existing_accounts.keys())
+
+    if missing_usernames:
+        # Prepare records for upsert
+        records_to_upsert = [
+            {
+                "fields": {
+                    "Username": uname,
+                }
+            }
+            for uname in missing_usernames
+        ]
+
+        # Process in batches of 10 as per Airtable's limit
+        for i in range(0, len(records_to_upsert), 10):
+            batch = records_to_upsert[i : i + 10]
+            try:
+                response = requests.post(
+                    f"https://api.airtable.com/v0/{BASE_ID}/{AIRTABLE_ACCOUNTS_TABLE}",
+                    headers=headers,
+                    json={
+                        "performUpsert": {"fieldsToMergeOn": ["Username"]},
+                        "records": batch,
+                    },
+                )
+                response.raise_for_status()
+                result = response.json()
+
+                # Update our accounts dictionary and cache with created/updated records
+                new_records = {}
+                for record in result.get("records", []):
+                    username = normalize_username(record["fields"].get("Username", ""))
+                    if username:
+                        accounts[username] = record["id"]
+                        new_records[username] = record
+
+                # Update cache with new records
+                cached_accounts = load_cached_accounts() or {}
+                cached_accounts.update(new_records)
+                save_accounts_cache(cached_accounts)
+
+                # Log the results
+                created = len(result.get("createdRecords", []))
+                updated = len(result.get("updatedRecords", []))
+                if created or updated:
+                    logging.info(
+                        f"Batch processed: {created} accounts created, {updated} accounts updated"
+                    )
+
+            except requests.HTTPError as e:
+                logging.error(f"Failed to upsert batch: {str(e)}")
+                logging.debug(f"Response content: {e.response.text}")
+                logging.debug(f"Failed batch: {batch}")
+
+            # Rate limiting protection
+            time.sleep(0.2)
+
+    return accounts
 
 
 def airtable_api_request(
@@ -298,48 +463,6 @@ def batch_request(
             logging.debug(f"Failed batch: {batch}")
 
     return successful_records
-
-
-def fetch_and_update_accounts(
-    usernames: Set[str], headers: Dict[str, str], accounts: Dict[str, str]
-) -> Dict[str, str]:
-    normalized_usernames = {normalize_username(username) for username in usernames}
-
-    formula = " OR ".join(
-        [f"LOWER({{Username}}) = '{uname}'" for uname in normalized_usernames]
-    )
-    if formula:
-        formula = f"OR({formula})"
-
-    existing_records = fetch_records_from_airtable(
-        AIRTABLE_ACCOUNTS_TABLE, headers, formula
-    )
-
-    for record in existing_records:
-        username = normalize_username(record["fields"].get("Username", ""))
-        if username:
-            accounts[username] = record["id"]
-            logging.debug(f"Found existing account: {username} -> {record['id']}")
-
-    missing_usernames = normalized_usernames - set(accounts.keys())
-    if missing_usernames:
-        logging.info(f"Creating {len(missing_usernames)} new accounts.")
-        new_entries = [{"fields": {"Username": uname}} for uname in missing_usernames]
-
-        created_records = batch_request(
-            f"https://api.airtable.com/v0/{BASE_ID}/{AIRTABLE_ACCOUNTS_TABLE}",
-            headers,
-            new_entries,
-            requests.post,
-        )
-
-        for record in created_records:
-            username = normalize_username(record["fields"].get("Username", ""))
-            if username:
-                accounts[username] = record["id"]
-                logging.debug(f"Created new account: {username} -> {record['id']}")
-
-    return accounts
 
 
 def fetch_existing_follows(

@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  followfeed:
+    build: .
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DISPLAY=:99
+    command: >
+      sh -c "
+        Xvfb :99 -screen 0 1280x1024x24 -ac +extension GLX +render -noreset &
+        python main.py
+      " 

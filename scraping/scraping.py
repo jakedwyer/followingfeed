@@ -344,7 +344,9 @@ def get_following(
     url = f"https://x.com/{handle}/following"
     driver.get(url)
     logger.info(f"Fetching new following for {handle}")
-    time.sleep(10)  # Initial wait for page load
+
+    # Random initial wait between 5-15 seconds
+    time.sleep(random.uniform(5, 15))
 
     initial_elements = driver.find_elements(
         By.XPATH, "//div[@aria-label='Timeline: Following']//a[contains(@href, '/')]"
@@ -354,23 +356,46 @@ def get_following(
         screenshot_path = f"screenshots/{handle}_following.png"
         driver.save_screenshot(screenshot_path)
         logger.info(f"Screenshot saved at {screenshot_path}")
-        return list(existing_follows)
+        return []
 
-    extracted_handles = set(existing_follows)
+    normalized_existing = {normalize_username(ef) for ef in existing_follows}
     logger.info(f"Existing handles: {len(existing_follows)}")
-    previous_handles_count = len(extracted_handles)
+
+    new_follows = set()
+    previous_total = 0
+    no_new_data_count = 0
+    scroll_height = 0
 
     try:
         while True:
-            driver.execute_script("window.scrollBy(0, 100);")
-            time.sleep(random.uniform(1, 5))
+            # Random scroll amount between 100-300 pixels
+            scroll_amount = random.randint(100, 300)
+            scroll_height += scroll_amount
+
+            # Occasionally scroll up a bit to simulate human behavior
+            if random.random() < 0.1:  # 10% chance
+                scroll_height -= random.randint(50, 150)
+                driver.execute_script(f"window.scrollTo(0, {max(0, scroll_height)});")
+                time.sleep(random.uniform(0.5, 1.5))
+
+            # Scroll down with smooth behavior
+            driver.execute_script(
+                f"window.scrollTo({{top: {scroll_height}, behavior: 'smooth'}});"
+            )
+
+            # Random pause between scrolls (longer than before)
+            time.sleep(random.uniform(2, 4))
+
+            # Occasionally take a longer pause
+            if random.random() < 0.15:  # 15% chance
+                time.sleep(random.uniform(4, 8))
 
             elements = driver.find_elements(
                 By.XPATH,
                 "//div[@aria-label='Timeline: Following']//a[contains(@href, '/')]",
             )
             current_handles = {
-                href.split("/")[-1]
+                normalize_username(href.split("/")[-1])
                 for el in elements
                 if (href := el.get_attribute("href"))
                 and href.startswith("https://x.com/")
@@ -379,20 +404,41 @@ def get_following(
                 and "search?q=" not in href
             }
 
-            new_handles = current_handles - extracted_handles
-            logger.info(f"Found {len(new_handles)} new handles.")
-            extracted_handles.update(new_handles)
+            # Only keep handles we haven't seen before
+            new_handles = current_handles - normalized_existing - new_follows
+            if new_handles:
+                logger.info(f"Found {len(new_handles)} new handles.")
+                new_follows.update(new_handles)
+                no_new_data_count = 0  # Reset counter when we find new handles
+            else:
+                no_new_data_count += 1
 
-            logger.info(f"Current total extracted handles: {len(extracted_handles)}")
+            logger.info(f"Current total new handles: {len(new_follows)}")
 
-            if len(extracted_handles) == previous_handles_count:
-                logger.info("No new data to load or reached the end of the page.")
+            # Check if we've reached the end (multiple checks with no new data)
+            if no_new_data_count >= 3:
+                logger.info(
+                    "No new data found after multiple attempts. Likely reached the end."
+                )
                 break
-            previous_handles_count = len(extracted_handles)
 
-            if max_accounts and len(extracted_handles) >= max_accounts:
+            if len(new_follows) == previous_total:
+                # Take a longer pause and try one more time before giving up
+                time.sleep(random.uniform(5, 10))
+                continue
+
+            previous_total = len(new_follows)
+
+            if max_accounts and len(new_follows) >= max_accounts:
                 logger.info(f"Reached max accounts limit of {max_accounts}")
                 break
+
+            # Check if we've hit Twitter's rate limit or other issues
+            if "rate-limit" in driver.current_url or "error" in driver.current_url:
+                logger.warning("Detected potential rate limiting or error page")
+                time.sleep(60)  # Wait a minute before continuing
+                driver.get(url)  # Reload the page
+                time.sleep(random.uniform(5, 10))
 
     except Exception as e:
         logger.error(
@@ -400,7 +446,9 @@ def get_following(
             exc_info=True,
         )
 
-    return list(extracted_handles)
+    # Final random pause before returning
+    time.sleep(random.uniform(2, 5))
+    return list(new_follows)
 
 
 def random_delay(min_seconds: int, max_seconds: int) -> None:

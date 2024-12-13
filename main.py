@@ -202,53 +202,95 @@ def process_user(
     """
     Process a user's following list and update Airtable accordingly.
     """
+    # Get the accounts this user is already following
     existing_follows = fetch_existing_follows(
         follower_record_id, headers, record_id_to_username
     )
     logging.info(f"Existing follows for {username}: {len(existing_follows)}")
 
+    # Get new follows from Twitter (now only returns truly new follows)
     new_follows = get_following(driver, username, existing_follows)
-    all_follows = {
-        normalize_username(uname) for uname in existing_follows.union(new_follows)
-    }
-    logging.info(f"Total follows for {username}: {len(all_follows)}")
 
-    # Update accounts dictionary with any new accounts
-    accounts = fetch_and_update_accounts(all_follows, headers, accounts)
+    if not new_follows:
+        logging.info(f"No new follows found for {username}")
+        return accounts, 0
 
-    # Get account IDs for all follows
-    followed_account_ids = []
-    missing_accounts = []
-    for uname in all_follows:
+    logging.info(f"Found {len(new_follows)} new follows for {username}")
+
+    # Convert list to set before passing to fetch_and_update_accounts
+    new_follows_set = set(new_follows)
+    accounts = fetch_and_update_accounts(new_follows_set, headers, accounts)
+
+    # Update the Followers field for each account while preserving existing followers
+    accounts_to_update = []
+    for uname in new_follows:
         normalized_uname = normalize_username(uname)
         if normalized_uname in accounts:
-            followed_account_ids.append(accounts[normalized_uname])
-        else:
-            missing_accounts.append(uname)
-            logging.warning(f"Account not found: {uname}")
+            account_id = accounts[normalized_uname]
+            try:
+                # Fetch current followers for this account
+                response = requests.get(
+                    f"https://api.airtable.com/v0/{BASE_ID}/{ACCOUNTS_TABLE_ID}/{account_id}",
+                    headers=headers,
+                )
+                response.raise_for_status()
+                record = response.json()
+                current_followers = record["fields"].get("Followers", [])
 
-    if missing_accounts:
-        logging.error(f"Missing accounts: {missing_accounts}")
+                # Only append if not already a follower
+                if follower_record_id not in current_followers:
+                    accounts_to_update.append(
+                        {
+                            "id": account_id,
+                            "fields": {
+                                "Followers": current_followers + [follower_record_id]
+                            },
+                        }
+                    )
+            except Exception as e:
+                logging.error(
+                    f"Failed to fetch followers for account {account_id}: {str(e)}"
+                )
 
-    # Update follower record with ALL account IDs
-    if followed_account_ids:
-        success = update_airtable_followers(
-            follower_record_id, followed_account_ids, headers
-        )
-        if not success:
-            logging.error(f"Failed to update all accounts for follower {username}.")
-        else:
-            logging.info(
-                f"Successfully updated {username} with {len(followed_account_ids)} follows"
-            )
-
-    logging.info(f"Raw new follows found: {len(new_follows)}")
-    logging.info(f"Normalized unique follows: {len(all_follows)}")
-    logging.info(f"Successfully linked accounts: {len(followed_account_ids)}")
-    if len(all_follows) != len(followed_account_ids):
-        logging.info(f"Difference due to {len(missing_accounts)} missing accounts")
+    if accounts_to_update:
+        # Update in batches of 10 as per Airtable's limit
+        for i in range(0, len(accounts_to_update), 10):
+            batch = accounts_to_update[i : i + 10]
+            try:
+                batch_request(
+                    f"https://api.airtable.com/v0/{BASE_ID}/{ACCOUNTS_TABLE_ID}",
+                    headers,
+                    batch,
+                    requests.patch,
+                )
+                logging.info(
+                    f"Successfully updated Followers field for batch of {len(batch)} accounts"
+                )
+            except Exception as e:
+                logging.error(
+                    f"Failed to update Followers field for accounts batch: {str(e)}"
+                )
 
     return accounts, len(new_follows)
+
+
+def fetch_current_account_ids(record_id: str, headers: Dict[str, str]) -> List[str]:
+    """
+    Fetch current Account IDs for a given follower record.
+    """
+    try:
+        response = requests.get(
+            f"https://api.airtable.com/v0/{BASE_ID}/{FOLLOWERS_TABLE_ID}/{record_id}",
+            headers=headers,
+        )
+        response.raise_for_status()
+        record = response.json()
+        return record["fields"].get("Account", [])
+    except requests.HTTPError as e:
+        logging.error(
+            f"Failed to fetch current account IDs for record {record_id}: {e.response.text}"
+        )
+        return []
 
 
 def process_list_members(
