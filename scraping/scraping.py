@@ -2,7 +2,6 @@ import logging
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -14,6 +13,7 @@ import random
 import pickle
 import unicodedata
 import re
+import os
 from fake_useragent import UserAgent
 from utils.user_data import update_user_details, get_user_details
 from utils.airtable import (
@@ -285,26 +285,28 @@ def update_twitter_data(
 
 
 def init_driver() -> webdriver.Chrome:
-    """Initialize and configure Chrome WebDriver."""
-    options = Options()
-    options.add_argument("--headless=new")  # New headless mode
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
-    options.add_argument("window-size=1920x1080")
-    options.add_argument("--remote-debugging-port=9222")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--disable-infobars")
-    options.add_argument("--start-maximized")
-    options.add_argument("--disable-extensions")
-    options.add_argument("--incognito")
-    options.add_argument(f"user-agent={UserAgent().random}")
+    """Initialize Chrome WebDriver with custom options."""
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")  # New headless mode
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--disable-notifications")
+    chrome_options.add_argument("--disable-popup-blocking")
+    chrome_options.add_argument("--start-maximized")
+    chrome_options.add_argument(f"user-agent={UserAgent().random}")
 
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options)
-    driver.set_window_size(1920, 1080)
-    logger.info("WebDriver initialized.")
-    return driver
+    # Use pre-installed ChromeDriver
+    service = Service(executable_path="/usr/local/bin/chromedriver")
+
+    try:
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        logger.info("WebDriver initialized successfully.")
+        return driver
+    except Exception as e:
+        logger.error(f"Failed to initialize WebDriver: {str(e)}")
+        raise
 
 
 def load_cookies(driver: webdriver.Chrome, cookie_path: str) -> None:

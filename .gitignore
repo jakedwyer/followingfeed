@@ -1,91 +1,42 @@
-# Python
+# Python cache files
 __pycache__/
 *.py[cod]
 *.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
 
-# Virtual Environments
-.env/
-.venv/
-venv/
-ENV/
-env/
-xfeed/
-env.bak/
-venv.bak/
-pythonenv*
-.python-version
-pyvenv.cfg
-
-# Environment Variables
+# Environment and dependencies
 .env
-.env.*
-!.env.example
+venv/
+xfeed/
+.python-version
 
 # IDE / Editor
 .vscode/
 .idea/
-*.sublime-*
 *.code-workspace
-.replit
 
-# OS Generated Files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Logs and Debugging
+# Logs and output
 *.log
-app.log.*
-/screenshots/
-/output/
-/archive/
+logs/
+screenshots/
+output/
+data/
 
-# Data and Secrets
+# Runtime data and secrets
 *.pkl
 user_details.json
+user_details.json.lock
 cookies.pkl
-config.yaml
-secure/
-*.gpg
-decrypt_files.sh
-encrypt_sync.sh
 
-# Deployment Keys and Scripts
-gh-actions-deploy-key*
-github_rsa*
-push_to_git.sh
+# Docker
+.docker/
+docker-compose.override.yml
 
-# Build and Temp
-.temp/
-dev/
-output.zip
-*.db
+# System files
+.DS_Store
+Thumbs.db
 
-# Binary files
-*.pyc
-*.pyo
-*.pyd
-*.so
-*.dll
-*.dylib
+# Temporary files
+*.tmp
+*.bak
+*.swp
 
