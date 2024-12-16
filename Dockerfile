@@ -30,27 +30,21 @@ RUN apt-get update && apt-get install -y \
     xdg-utils \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Chrome/Chromium based on architecture
-RUN if [ "$(uname -m)" = "aarch64" ]; then \
-        # ARM64 - Install Chromium
-        apt-get update && apt-get install -y \
-        chromium \
-        chromium-driver \
-        && apt-get clean; \
-    else \
-        # x86_64 - Install Chrome
-        wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-        && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
-        && apt-get update \
-        && apt-get install -y google-chrome-stable \
-        && CHROME_VERSION=$(google-chrome --version | awk '{print $3}' | cut -d'.' -f1-3) \
-        && CHROMEDRIVER_VERSION=$(curl -s "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_VERSION}") \
-        && wget -q -O /tmp/chromedriver.zip https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip \
-        && unzip /tmp/chromedriver.zip -d /usr/local/bin \
-        && rm /tmp/chromedriver.zip \
-        && chmod +x /usr/local/bin/chromedriver \
-        && apt-get clean; \
-    fi
+# Install Chrome
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list' \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install ChromeDriver
+RUN CHROME_VERSION=$(google-chrome --version | awk '{print $3}' | cut -d. -f1) \
+    && wget -q "https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/${CHROME_VERSION}.0.6778.108/linux64/chromedriver-linux64.zip" -O /tmp/chromedriver.zip \
+    && unzip /tmp/chromedriver.zip -d /tmp \
+    && mv /tmp/chromedriver-linux64/chromedriver /usr/local/bin/ \
+    && chmod +x /usr/local/bin/chromedriver \
+    && rm -rf /tmp/chromedriver* \
+    && chromedriver --version
 
 # Set working directory
 WORKDIR /app
@@ -63,7 +57,7 @@ RUN useradd -m appuser && \
     mkdir -p /tmp/.X11-unix && \
     chmod 1777 /tmp/.X11-unix && \
     # Set up Chrome directories and permissions
-    mkdir -p /home/appuser/.config/chromium && \
+    mkdir -p /home/appuser/.config/google-chrome && \
     chown -R appuser:appuser /home/appuser/.config
 
 # Copy requirements first to leverage Docker cache
@@ -80,15 +74,8 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 ENV DISPLAY=:99
 ENV DBUS_SESSION_BUS_ADDRESS=/dev/null
-
-# Set Chrome/Chromium paths based on architecture
-RUN if [ "$(uname -m)" = "aarch64" ]; then \
-        echo "export CHROME_BIN=/usr/bin/chromium" >> /home/appuser/.bashrc && \
-        echo "export CHROMEDRIVER_PATH=/usr/bin/chromedriver" >> /home/appuser/.bashrc; \
-    else \
-        echo "export CHROME_BIN=/usr/bin/google-chrome" >> /home/appuser/.bashrc && \
-        echo "export CHROMEDRIVER_PATH=/usr/local/bin/chromedriver" >> /home/appuser/.bashrc; \
-    fi
+ENV CHROME_BIN=/usr/bin/google-chrome
+ENV CHROMEDRIVER_PATH=/usr/local/bin/chromedriver
 
 USER appuser
 

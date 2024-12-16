@@ -1,18 +1,16 @@
 #!/bin/bash
 
-# Set script directory
-SCRIPT_DIR="/root/followfeed"
-PYTHON_PATH="/root/followfeed/xfeed/bin/python"
-LOG_FILE="/var/log/followfeed.log"
+# Set the working directory
+cd /root/followfeed
 
-# Change to the script directory
-cd $SCRIPT_DIR || exit 1
+# Stop any existing container
+docker compose down
 
-# Activate virtual environment
-source "${SCRIPT_DIR}/xfeed/bin/activate"
+# Start the container
+docker compose up -d
 
-# Run the Python script with absolute path
-$PYTHON_PATH main.py >> $LOG_FILE 2>&1
+# Wait for the container to finish (optional - adjust timeout as needed)
+timeout 2h docker compose logs -f
 
-# Deactivate virtual environment
-deactivate
+# Clean up
+docker compose down
