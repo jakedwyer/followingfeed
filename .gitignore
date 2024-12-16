@@ -8,7 +8,7 @@ __pycache__/
 venv/
 xfeed/
 .python-version
-
+.venv/
 # IDE / Editor
 .vscode/
 .idea/
