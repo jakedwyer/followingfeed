@@ -285,8 +285,8 @@ def update_twitter_data(
 
 
 def init_driver() -> webdriver.Chrome:
-    """Initialize Chrome WebDriver with custom options."""
-    chrome_options = Options()
+    """Initialize Chrome WebDriver with appropriate options."""
+    chrome_options = webdriver.ChromeOptions()
     chrome_options.add_argument("--headless=new")  # New headless mode
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
@@ -297,8 +297,20 @@ def init_driver() -> webdriver.Chrome:
     chrome_options.add_argument("--start-maximized")
     chrome_options.add_argument(f"user-agent={UserAgent().random}")
 
-    # Use pre-installed ChromeDriver
-    service = Service(executable_path="/usr/local/bin/chromedriver")
+    # Set binary location explicitly
+    chrome_binary = os.environ.get("CHROME_BIN", "/usr/bin/google-chrome")
+    if os.path.exists(chrome_binary):
+        chrome_options.binary_location = chrome_binary
+
+    # Set ChromeDriver path explicitly
+    chromedriver_path = os.environ.get(
+        "CHROMEDRIVER_PATH", "/usr/local/bin/chromedriver"
+    )
+    if not os.path.exists(chromedriver_path):
+        logger.error(f"ChromeDriver not found at {chromedriver_path}")
+        raise FileNotFoundError(f"ChromeDriver not found at {chromedriver_path}")
+
+    service = Service(executable_path=chromedriver_path)
 
     try:
         driver = webdriver.Chrome(service=service, options=chrome_options)
@@ -306,6 +318,15 @@ def init_driver() -> webdriver.Chrome:
         return driver
     except Exception as e:
         logger.error(f"Failed to initialize WebDriver: {str(e)}")
+        # Log more detailed information for debugging
+        logger.error(f"Chrome binary location: {chrome_binary}")
+        logger.error(f"ChromeDriver path: {chromedriver_path}")
+        logger.error(
+            f"Chrome version: {os.popen('google-chrome --version').read().strip()}"
+        )
+        logger.error(
+            f"ChromeDriver version: {os.popen('chromedriver --version').read().strip()}"
+        )
         raise
 
 
