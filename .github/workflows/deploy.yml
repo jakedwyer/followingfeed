@@ -32,25 +32,20 @@ jobs:
             echo "Error: DEPLOY_KEY secret is not set"
             exit 1
           fi
-          
-          # Verify SSH key format
-          echo "Verifying SSH key format..."
-          echo "${{ secrets.DEPLOY_KEY }}" | ssh-keygen -l -f - || {
-            echo "Error: Invalid SSH key format"
-            exit 1
-          }
 
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Fetch all history for git operations
-
-      - name: Setup SSH Debug
+      - name: Setup SSH and verify key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keygen -l -f ~/.ssh/deploy_key || echo "Failed to read SSH key"
+          
+          # Verify the SSH key
+          if ! ssh-keygen -y -f ~/.ssh/deploy_key &>/dev/null; then
+            echo "Error: Invalid SSH private key format"
+            exit 1
+          fi
+          
+          echo "SSH key verified successfully"
           echo "StrictHostKeyChecking=no" > ~/.ssh/config
 
       - name: Deploy to Production
