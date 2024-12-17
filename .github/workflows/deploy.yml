@@ -14,7 +14,6 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: production
     timeout-minutes: 15  # Set a timeout for the entire job
 
     steps:
@@ -45,7 +44,7 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_KEY }}
-          script_stop: true  # Stop script if any command fails
+          command_timeout: "15m"  # Set timeout for SSH commands
           script: |
             set -e
             echo "Starting deployment at $(date)"
