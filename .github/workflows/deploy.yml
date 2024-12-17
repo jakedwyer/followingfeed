@@ -1,3 +1,4 @@
+# Test deployment - triggering GitHub Actions
 name: Deploy to Production
 
 on:
@@ -31,11 +32,26 @@ jobs:
             echo "Error: DEPLOY_KEY secret is not set"
             exit 1
           fi
+          
+          # Verify SSH key format
+          echo "Verifying SSH key format..."
+          echo "${{ secrets.DEPLOY_KEY }}" | ssh-keygen -l -f - || {
+            echo "Error: Invalid SSH key format"
+            exit 1
+          }
 
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Fetch all history for git operations
+
+      - name: Setup SSH Debug
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keygen -l -f ~/.ssh/deploy_key || echo "Failed to read SSH key"
+          echo "StrictHostKeyChecking=no" > ~/.ssh/config
 
       - name: Deploy to Production
         id: deploy
