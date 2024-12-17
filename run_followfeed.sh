@@ -27,12 +27,12 @@ docker compose down --remove-orphans || log "Warning: Cleanup of old containers 
 log "Starting container"
 docker compose up -d
 
-# Wait for the container to finish (timeout after 2 hours)
-log "Waiting for container to complete (timeout: 2 hours)"
-if timeout 2h docker compose logs -f; then
+# Wait for the container to finish (timeout after 4 hours)
+log "Waiting for container to complete (timeout: 4 hours)"
+if timeout 4h docker compose logs -f; then
     log "Container completed successfully"
 else
-    log "Container timed out after 2 hours"
+    log "Container timed out after 4 hours"
 fi
 
 # Clean up
