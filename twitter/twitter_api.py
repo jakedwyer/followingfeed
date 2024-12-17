@@ -1,14 +1,14 @@
 # twitter/twitter_api.py
 import logging
-from typing import List, Dict, Any
+import os
+from typing import Dict, List, Any
 
 import aiohttp
-import os
 
 logger = logging.getLogger(__name__)
 
-TWITTER_BEARER_TOKEN = os.environ.get("TWITTER_BEARER_TOKEN")
-LIST_ID = os.environ.get("LIST_ID")
+TWITTER_BEARER_TOKEN: str | None = os.environ.get("TWITTER_BEARER_TOKEN")
+LIST_ID: str | None = os.environ.get("LIST_ID")
 
 
 async def fetch_list_members_async(
