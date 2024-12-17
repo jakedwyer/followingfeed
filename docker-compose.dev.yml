@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  followfeed:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app  # Mount entire project for development
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./screenshots:/app/screenshots
+      - ./output:/app/output
+    env_file:
+      - .env.development
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DISPLAY=:99
+      - ENVIRONMENT=development
+    ports:
+      - "5001:5000"  # Expose port for potential API/debug
+    command: >
+      sh -c "
+        Xvfb :99 -screen 0 1280x1024x24 -ac +extension GLX +render -noreset &
+        python main.py
+      "
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+    # Enable hot reload for development
+    develop:
+      watch:
+        - action: sync
+          path: .
+          target: /app
+          ignore:
+            - ".git/"
+            - ".env*"
+            - "__pycache__/"
+            - "*.pyc"
