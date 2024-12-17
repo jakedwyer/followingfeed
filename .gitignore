@@ -5,11 +5,14 @@ __pycache__/
 
 # Environment and dependencies
 .env
+.env.*
 venv/
+env/
 xfeed/
 .python-version
 .venv/
-# IDE / Editor
+
+# IDE / Editor configurations
 .vscode/
 .idea/
 *.code-workspace
@@ -27,9 +30,12 @@ user_details.json
 user_details.json.lock
 cookies.pkl
 
-# Docker
+# Docker development files
 .docker/
 docker-compose.override.yml
+docker-compose.dev.yml
+Dockerfile.dev
+Dockerfile.local
 
 # System files
 .DS_Store
@@ -39,4 +45,56 @@ Thumbs.db
 *.tmp
 *.bak
 *.swp
+
+# Node modules (if any)
+node_modules/
+
+# Git metadata
+.git/
+.gitignore
+
+# Test files and directories
+tests/
+test_*.py
+*.test.py
+
+# Development and deployment scripts
+dev.sh
+setup_dev.sh
+deploy.sh
+run_followfeed.sh
+push_to_git.sh
+
+# Documentation and markdown files
+*.md
+*.markdown
+docs/
+README*
+CHANGELOG*
+systeminfo.md
+utils/core-setup.md
+
+# License files
+LICENSE*
+LICENSE.*
+
+# GitHub workflows and actions
+.github/
+.gitattributes
+
+# Old or deprecated scripts
+fetch_profile.py
+clean_user_details.py
+dedupe.py
+update_airtable_json.py
+
+# Auxiliary files
+aux
+airtableschema.json
+*.code-workspace
+
+# Ignore any other irrelevant files or directories
+*.old
+*.orig
+*.bk
 
