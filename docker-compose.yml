@@ -8,6 +8,7 @@ services:
       - ./logs:/app/logs
       - ./screenshots:/app/screenshots
       - ./output:/app/output
+      - /var/log/followfeed.log:/var/log/followfeed.log
     env_file:
       - .env
     environment:
@@ -22,3 +23,16 @@ services:
       resources:
         limits:
           memory: 2G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    restart: unless-stopped
+    stop_grace_period: 5m
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'python main.py' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
