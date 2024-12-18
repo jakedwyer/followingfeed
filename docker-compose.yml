@@ -9,6 +9,7 @@ services:
       - ./screenshots:/app/screenshots
       - ./output:/app/output
       - /var/log/followfeed.log:/var/log/followfeed.log
+      - ./user_details.json:/app/user_details.json
     env_file:
       - .env
     environment:
