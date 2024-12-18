@@ -34,7 +34,7 @@ RUN apt-get update && apt-get install -y \
 
 # Create non-root user and setup directories
 RUN useradd -m appuser && \
-    mkdir -p /app/logs /app/data /tmp/chrome-data && \
+    mkdir -p /app/logs /app/data /tmp/chrome-data /app/screenshots && \
     chown -R appuser:appuser /app /tmp/chrome-data && \
     # Create Xvfb directories with correct permissions
     mkdir -p /tmp/.X11-unix && \
