@@ -18,7 +18,7 @@ AIRTABLE_ACCOUNTS_TABLE = env_vars["airtable_accounts_table"]
 AIRTABLE_FOLLOWERS_TABLE = env_vars["airtable_followers_table"]
 # Common headers used across functions
 AIRTABLE_HEADERS = {
-    "Authorization": f"Bearer {AIRTABLE_API_KEY}",
+    "Authorization": "Bearer " + AIRTABLE_API_KEY,
     "Content-Type": "application/json",
 }
 

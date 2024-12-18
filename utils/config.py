@@ -6,8 +6,21 @@ import logging
 def load_env_variables():
     logging.info(f"Current working directory: {os.getcwd()}")
 
+    # Print all environment variables before loading .env
+    logging.debug("Environment variables before loading .env:")
+    for key, value in os.environ.items():
+        if "AIRTABLE" in key:
+            logging.debug(f"{key}: {value}")
+
     load_dotenv()
     logging.info("Environment variables loaded from .env file")
+
+    # Print all environment variables after loading .env
+    logging.debug("Environment variables after loading .env:")
+    for key, value in os.environ.items():
+        if "AIRTABLE" in key:
+            logging.debug(f"{key}: {value}")
+
     env_vars = {
         "openai_api_key": os.getenv("OPENAI_API_KEY"),
         "twitter_api_key": os.getenv("TWITTER_API_KEY"),
