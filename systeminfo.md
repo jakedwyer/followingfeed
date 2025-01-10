@@ -30,6 +30,21 @@ System Information:
 Linux XFeed 6.5.0-44-generic #44-Ubuntu SMP PREEMPT_DYNAMIC Fri Jun  7 15:10:09 UTC 2024 x86_64 x86_64 x86_64 GNU/Linux
 Python Version:
 Python 3.11.6
+The system specifications for the droplet named "XFeed" in the XFollow project are as follows:
+
+-  **Region**: NYC3
+-  **Operating System**: Ubuntu 23.10 x64
+-  **vCPUs**: 4
+-  **Memory**: 8 GB
+-  **Disk Space**: 120 GB
+-  **Monthly Cost**: $56
+-  **IPv4 Address**: 165.227.78.93
+-  **Private IP**: 10.108.0.4
+-  **VPC**: default-nyc3
+
+These specifications indicate a mid-range virtual machine with a focus on balanced performance suitable for various applications.
+
+
 
 ## Overview
 
