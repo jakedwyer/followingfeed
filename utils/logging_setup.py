@@ -1,6 +1,7 @@
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+import atexit
 
 
 def setup_logging():
@@ -9,6 +10,7 @@ def setup_logging():
 
     # Remove all existing handlers
     for handler in logger.handlers[:]:
+        handler.close()  # Properly close the handler
         logger.removeHandler(handler)
 
     # Ensure logs directory exists
@@ -18,8 +20,10 @@ def setup_logging():
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, "main.log")
 
-    # File handler
-    file_handler = logging.FileHandler(log_file)
+    # File handler with rotation
+    file_handler = RotatingFileHandler(
+        log_file, maxBytes=10 * 1024 * 1024, backupCount=5  # 10MB
+    )
     file_handler.setLevel(logging.INFO)
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -32,3 +36,11 @@ def setup_logging():
     console_handler.setLevel(logging.INFO)
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
+
+    # Register cleanup function
+    def cleanup():
+        for handler in logger.handlers[:]:
+            handler.close()
+            logger.removeHandler(handler)
+
+    atexit.register(cleanup)
