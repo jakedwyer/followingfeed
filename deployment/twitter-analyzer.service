@@ -1,0 +1,33 @@
+[Unit]
+Description=Twitter Profile Analyzer API
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/followfeed
+Environment=PYTHONPATH=/root/followfeed
+Environment=PATH=/root/followfeed/xfeed/bin:$PATH
+
+# Load environment variables from .env file
+EnvironmentFile=/root/followfeed/.env
+
+ExecStart=/root/followfeed/xfeed/bin/uvicorn api.app:app --host 0.0.0.0 --port 8001 --workers 4 --timeout-keep-alive 75
+
+# Restart configuration
+Restart=always
+RestartSec=10
+StartLimitBurst=0
+
+# Resource limits
+LimitNOFILE=65535
+CPUQuota=85%
+MemoryLimit=2G
+
+# Logging
+StandardOutput=append:/var/log/twitter-analyzer/access.log
+StandardError=append:/var/log/twitter-analyzer/error.log
+
+[Install]
+WantedBy=multi-user.target 

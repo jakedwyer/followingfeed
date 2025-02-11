@@ -1,0 +1,33 @@
+[Unit]
+Description=Twitter Profile Analyzer Monitoring Service
+After=twitter-analyzer.service
+Wants=twitter-analyzer.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/followfeed
+Environment=PYTHONPATH=/root/followfeed
+Environment=PATH=/usr/bin:/usr/sbin:/bin:/sbin:/root/followfeed/xfeed/bin:$PATH
+
+# Load environment variables from .env file
+EnvironmentFile=/root/followfeed/.env
+
+ExecStart=/root/followfeed/xfeed/bin/python3 deployment/monitor_service.py
+
+# Restart configuration
+Restart=always
+RestartSec=10
+StartLimitIntervalSec=0
+StartLimitBurst=0
+
+# Resource limits
+CPUQuota=25%
+MemoryMax=512M
+
+# Logging
+StandardOutput=append:/var/log/twitter-analyzer/monitor.log
+StandardError=append:/var/log/twitter-analyzer/monitor-error.log
+
+[Install]
+WantedBy=multi-user.target 

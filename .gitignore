@@ -41,3 +41,15 @@ Thumbs.db
 *.swp
 
 deployLog.txt
+
+# Additional temporary files
+aux
+*.zip
+git_push.log
+non_existing_users.json
+processed_records.json
+.benchmarks/
+.pytest_cache/
+.mypy_cache/
+.cache/
+redis-data/

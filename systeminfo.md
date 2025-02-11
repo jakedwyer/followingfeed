@@ -20,16 +20,13 @@ I am building this application Main.py on a MacBook Air M3. Utilizing Github for
 
 # Software
 MacOs Sequoia 15.1.1
-(.venv) jake@Mac followingfeed % which python
-/Users/jake/Dev/followingfeed/.venv/bin/python
-(.venv) jake@Mac followingfeed % python --version
 Python 3.12.3
 
 # Production Machine
 System Information:
 Linux XFeed 6.5.0-44-generic #44-Ubuntu SMP PREEMPT_DYNAMIC Fri Jun  7 15:10:09 UTC 2024 x86_64 x86_64 x86_64 GNU/Linux
-Python Version:
-Python 3.11.6
+Python Version: 3.11.6
+
 The system specifications for the droplet named "XFeed" in the XFollow project are as follows:
 
 -  **Region**: NYC3
@@ -42,9 +39,131 @@ The system specifications for the droplet named "XFeed" in the XFollow project a
 -  **Private IP**: 10.108.0.4
 -  **VPC**: default-nyc3
 
-These specifications indicate a mid-range virtual machine with a focus on balanced performance suitable for various applications.
+# Project Structure
 
+## Core Components
 
+1. **Main Application (`main.py`)**
+   - Asynchronous processing of Twitter followers and their following lists
+   - Memory-optimized batch processing with configurable batch sizes
+   - Integrated logging and monitoring
+   - Lock mechanism to prevent multiple instances
+
+2. **API Layer (`api/`)**
+   - FastAPI-based REST API interface
+   - Handles web requests and integrations
+
+3. **Twitter Integration (`twitter/`)**
+   - Profile analysis and data collection
+   - Twitter API integration and scraping capabilities
+
+4. **Utilities (`utils/`)**
+   - Logging setup and configuration
+   - Helper functions and common utilities
+   - Twitter-specific helper functions
+   - Airtable integration utilities
+
+5. **Scraping Module (`scraping/`)**
+   - Selenium-based web scraping
+   - Profile data extraction
+   - Cookie management
+
+## Key Dependencies
+
+```
+# Core Dependencies
+aiohttp==3.9.3          # Async HTTP client/server
+requests==2.31.0         # HTTP library
+selenium==4.18.1         # Browser automation
+psutil==5.9.8           # System monitoring
+python-dotenv>=0.19.0    # Environment management
+webdriver-manager==4.0.1 # Selenium driver management
+beautifulsoup4==4.12.3   # HTML parsing
+pandas==2.2.1           # Data manipulation
+pyairtable==2.2.1       # Airtable API client
+
+# API Dependencies
+fastapi==0.110.0        # API framework
+uvicorn==0.27.1         # ASGI server
+pydantic==2.6.3         # Data validation
+
+# Performance & Async
+uvloop==0.19.0          # Fast event loop
+aiodns==3.1.1           # Async DNS resolver
+aiofiles==23.2.1        # Async file operations
+
+# AI Integration
+openai>=1.0.0           # OpenAI API integration
+```
+
+## Deployment Configuration
+
+1. **Docker Setup**
+   - Dockerfile with multi-stage build
+   - Python 3.12 slim base image
+   - Chrome/Chromium for Selenium
+   - Non-root user for security
+
+2. **Environment Management**
+   - `.env` for configuration
+   - `.env.example` for template
+   - Secure file encryption (decrypt_files.sh)
+
+3. **Development Tools**
+   - Linting: pylint (.pylintrc)
+   - Type checking: mypy (mypy.ini)
+   - Testing: pytest in tests/
+
+4. **Monitoring & Logging**
+   - Structured logging (logging.conf)
+   - Memory usage tracking
+   - Performance metrics
+
+5. **Data Management**
+   - Redis for caching (redis-data/)
+   - JSON storage for user details
+   - CSV exports for analysis
+
+## Security & Performance Features
+
+1. **Security**
+   - File-based locking mechanism
+   - Environment variable encryption
+   - Non-root Docker execution
+   - Secure cookie handling
+
+2. **Performance Optimization**
+   - Async/await for I/O operations
+   - Batch processing with configurable sizes
+   - Memory usage monitoring
+   - Connection pooling
+   - Rate limiting implementation
+
+3. **Error Handling**
+   - Comprehensive logging
+   - Automatic retries with backoff
+   - Exception tracking
+   - Process monitoring
+
+## Development Workflow
+
+1. **Local Development**
+   - Virtual environment management
+   - Hot-reload capabilities
+   - Debug configuration
+   - Local testing suite
+
+2. **Deployment Process**
+   - Automated deployment scripts
+   - Environment validation
+   - Health checks
+   - Backup procedures
+
+3. **Monitoring & Maintenance**
+   - Log rotation
+   - Performance metrics
+   - Error tracking
+   - Data validation
 
 ## Overview
 
