@@ -112,7 +112,7 @@ def test_analyze_endpoint():
     try:
         response = requests.post(
             "http://localhost:8001/analyze_profile",
-            json={"username": "twitter"},
+            json={"username": "support"},
             timeout=30,
         )
 
