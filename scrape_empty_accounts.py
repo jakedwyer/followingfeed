@@ -53,7 +53,7 @@ def get_unenriched_accounts() -> List[Tuple[str, str]]:
         records = fetch_records_from_airtable(
             TABLE_ID,
             HEADERS,
-            formula="OR({Full Name} = BLANK(), {Description} = BLANK())",
+            formula="OR(AND({Full Name} = BLANK(), {Description} = BLANK()), {Full Name} = BLANK())",
         )
         logger.info(f"Pulled {len(records)} unenriched records from Airtable")
         airtable_usernames = {
@@ -196,7 +196,7 @@ def main() -> None:
                 else:
                     logger.warning(f"Could not fetch profile for {username}")
                     # Optionally delete records that don't exist
-                    # delete_airtable_record(record_id)
+                    delete_airtable_record(record_id)
 
             except Exception as e:
                 logger.error(f"Error processing {username}: {e}", exc_info=True)

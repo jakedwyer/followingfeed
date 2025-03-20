@@ -85,7 +85,7 @@ class Profile:
 
 
 class NitterScraper:
-    def __init__(self, base_url: str = "http://67.207.92.143:8080"):
+    def __init__(self, base_url: str = "http://localhost:8081"):
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
         self.session.headers.update(

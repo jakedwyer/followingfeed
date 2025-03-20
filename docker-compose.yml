@@ -1,0 +1,40 @@
+version: "3"
+
+services:
+  followfeed-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: followfeed-api
+    ports:
+      - "${API_PORT:-8000}:8000"  # Map host port from env var to container port 8000
+    volumes:
+      - .:/app
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # If you need a database or other services, add them here
+  # For example:
+  # followfeed-db:
+  #   image: postgres:13
+  #   container_name: followfeed-db
+  #   environment:
+  #     - POSTGRES_USER=postgres
+  #     - POSTGRES_PASSWORD=postgres
+  #     - POSTGRES_DB=followfeed
+  #   volumes:
+  #     - followfeed-db-data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+
+# volumes:
+#   followfeed-db-data: 

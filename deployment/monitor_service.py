@@ -22,7 +22,7 @@ logging.basicConfig(
 
 # Constants
 SERVICE_NAME = "twitter-analyzer"
-API_PORT = 8001
+API_PORT = 8000
 MAX_CPU_PERCENT = 85
 MAX_MEMORY_PERCENT = 80
 HEALTH_CHECK_RETRIES = 3
@@ -100,7 +100,7 @@ def check_service_status():
 def check_health_endpoint():
     """Check if the health endpoint is responding."""
     try:
-        response = requests.get("http://localhost:8001/health", timeout=5)
+        response = requests.get(f"http://localhost:{API_PORT}/health", timeout=5)
         return response.status_code == 200
     except Exception as e:
         logging.error(f"Health check failed: {e}")
@@ -111,7 +111,7 @@ def test_analyze_endpoint():
     """Test the analyze endpoint with a sample profile."""
     try:
         response = requests.post(
-            "http://localhost:8001/analyze_profile",
+            f"http://localhost:{API_PORT}/analyze_profile",
             json={"username": "support"},
             timeout=30,
         )
@@ -167,7 +167,7 @@ def restart_service() -> bool:
             time.sleep(wait_interval)
             try:
                 # Try to connect to the health endpoint
-                response = requests.get("http://localhost:8001/health", timeout=2)
+                response = requests.get("http://localhost:8000/health", timeout=2)
                 if response.status_code == 200:
                     logging.info("Service is up and responding")
                     return True

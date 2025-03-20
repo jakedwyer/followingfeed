@@ -39,7 +39,7 @@ def profile_analyzer():
 def test_nitter_scraper_initialization(nitter_scraper):
     """Test that NitterScraper initializes correctly"""
     assert nitter_scraper is not None
-    assert nitter_scraper.base_url == "http://67.207.92.143:8080"
+    assert nitter_scraper.base_url == "http://localhost:8081"
     assert nitter_scraper.session is not None
 
 

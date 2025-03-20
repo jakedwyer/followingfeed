@@ -8,7 +8,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def test_nitter_scraper():
     """Test the custom Nitter scraper functionality."""
-    scraper = NitterScraper(base_url="http://67.207.92.143:8080")
+    scraper = NitterScraper(base_url="http://localhost:8081")
 
     # Test getting a profile
     print("\nTesting profile fetch...")
