@@ -13,7 +13,7 @@ Environment=PATH=/usr/bin:/usr/sbin:/bin:/sbin:/root/followfeed/xfeed/bin:$PATH
 EnvironmentFile=/root/followfeed/.env
 
 # Use API_PORT environment variable if set, otherwise default to 8000
-ExecStart=/bin/bash -c '/root/followfeed/xfeed/bin/uvicorn api.app:app --host 0.0.0.0 --port ${API_PORT:-8000} --workers 4 --timeout-keep-alive 120 --log-level warning --limit-concurrency 100 --backlog 200 --proxy-headers'
+ExecStart=/bin/bash -c '/root/followfeed/xfeed/bin/uvicorn api.app:app --host 0.0.0.0 --port 8000 --workers 4 --timeout-keep-alive 120 --log-level warning --limit-concurrency 100 --backlog 200 --proxy-headers'
 
 # Restart configuration
 Restart=always

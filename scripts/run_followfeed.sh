@@ -16,7 +16,7 @@ handle_error() {
     local exit_code=$?
     log "Error occurred in script at line $1, exit code: $exit_code"
     # Ensure cleanup happens even on error
-    docker compose down --remove-orphans || true
+    cd /root/followfeed/docker && docker compose down --remove-orphans || true
     exit $exit_code
 }
 
@@ -45,7 +45,7 @@ fi
 
 # Ensure old containers are cleaned up
 log "Cleaning up old containers"
-docker compose down --remove-orphans || log "Warning: Cleanup of old containers failed"
+cd docker && docker compose down --remove-orphans || log "Warning: Cleanup of old containers failed"
 
 # Clean up old logs if they're too large (keep last 100MB)
 if [ -f /var/log/followfeed.log ] && [ $(wc -c < /var/log/followfeed.log) -gt 104857600 ]; then

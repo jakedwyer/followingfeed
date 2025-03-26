@@ -1,49 +1,94 @@
 # FollowFeed
 
-## Port Configuration
+A tool for tracking and analyzing social media accounts and their followers.
 
-To avoid port conflicts when running multiple applications on the same machine, both the FollowFeed API and Nitter applications use configurable ports through environment variables.
+## Project Structure
 
-### Default Ports
-- FollowFeed API: 8000
-- Nitter: 8081
-
-### Changing Ports
-
-You can change the ports by setting the following environment variables in your `.env` file:
+The project has been reorganized for better maintainability:
 
 ```
-API_PORT=8000  # Change to any available port
-NITTER_PORT=8081  # Change to any available port
+followfeed/
+├── config/               # Configuration files
+├── data/                 # Data storage
+├── docker/               # Docker-related files
+│   ├── app/              # Main application Docker files
+│   └── api/              # API service Docker files
+├── logs/                 # Log files
+├── scripts/              # Helper scripts
+│   └── deployment/       # Deployment-specific scripts
+├── src/                  # Source code
+│   └── followfeed/       # Main package
+│       ├── api/          # API-related code
+│       ├── core/         # Core application logic
+│       ├── scraping/     # Web scraping utilities
+│       ├── twitter/      # Twitter-specific functionality
+│       └── utils/        # Utility functions
+└── tests/                # Test suite
 ```
 
-These environment variables are used in:
-1. Docker Compose configurations
-2. SystemD service files
-3. Application code through the `utils/port_config.py` module
+## Installation
 
-### Using in Development
+### Development Setup
 
-When running the applications locally, you can:
-
-1. Set the environment variables before starting the applications:
-   ```bash
-   export API_PORT=8005
-   export NITTER_PORT=8085
+1. Clone the repository:
+   ```
+   git clone https://github.com/yourusername/followfeed.git
+   cd followfeed
    ```
 
-2. Or modify the `.env` file directly.
+2. Create a virtual environment and install dependencies:
+   ```
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   pip install -e .  # Install the package in development mode
+   ```
 
-### Using with Docker Compose
+3. Copy the example environment file and edit it:
+   ```
+   cp .env.example .env
+   ```
 
-The Docker Compose files are already configured to use these environment variables:
+4. Edit `.env` with your credentials and configuration.
 
-```bash
-# Start with default ports
-docker-compose up -d
+### Using Docker
 
-# Start with custom ports
-API_PORT=8005 NITTER_PORT=8085 docker-compose up -d
+1. Build and run using Docker Compose:
+   ```
+   cd docker
+   docker compose up -d
+   ```
+
+## Usage
+
+### Running the Application
+
+```
+python main.py
 ```
 
-This configuration ensures that you can run multiple instances of these applications on the same machine without port conflicts. 
+Or use the installed command:
+
+```
+followfeed
+```
+
+### Running the API Server
+
+```
+cd docker/api
+docker compose up -d followfeed-api
+```
+
+Or use the provided script:
+
+```
+./scripts/run_api.sh
+```
+
+## Configuration
+
+The application is configured using environment variables defined in the `.env` file.
+
+## License
+
+[Your License Here] 

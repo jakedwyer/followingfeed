@@ -1,34 +1,36 @@
+# Core Dependencies
 aiohttp==3.9.3
-requests==2.31.0
+requests>=2.28.1  # Relaxed for pnytter compatibility
 selenium==4.18.1
 psutil==5.9.8
 python-dotenv>=0.19.0
-fake-useragent==1.4.0
 webdriver-manager==4.0.1
-beautifulsoup4==4.12.3
+pyairtable==1.4.0  # Version compatible with pydantic 1.9.1
+fastapi<0.100.0  # Version compatible with pydantic 1.9.1
+uvicorn==0.27.1
+filelock>=3.0.0  # Required by utils.user_data
+fake-useragent>=1.4.0  # Required by scraping.scraping
+
+# Web Scraping
+beautifulsoup4==4.11.1  # Pinned for pnytter compatibility
 lxml==5.1.0
-pandas==2.2.1
-tqdm==4.66.2
-urllib3==2.2.1
-certifi==2024.2.2
-charset-normalizer==3.3.2
-idna==3.6
-attrs==23.2.0
+
+# Async Dependencies
+uvloop==0.19.0
+aiodns==3.1.1
+brotlipy==0.7.0
+aiosignal==1.3.1
 multidict==6.0.5
 yarl==1.9.4
 frozenlist==1.4.1
-aiosignal==1.3.1
 async-timeout==4.0.3
-filelock==3.13.1
-pyairtable==2.2.1
-uvloop==0.19.0
-aiodns==3.1.1
-chardet==5.2.0
-brotlipy==0.7.0
-aiofiles==23.2.1
-fastapi==0.110.0
-uvicorn==0.27.1
-openai>=1.0.0
-pydantic==2.6.3
-pnytter>=0.1.0
+
+# Retry Logic
 tenacity>=8.0.0
+
+# Pin pydantic to version required by pnytter
+pydantic==1.9.1  # Required by pnytter and compatible with older fastapi
+
+# Optional Dependencies
+openai>=1.0.0
+pnytter==0.1.1  # Pin to specific version for compatibility

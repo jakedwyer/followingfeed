@@ -3,14 +3,14 @@ version: "3"
 services:
   followfeed:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: docker/app/Dockerfile
     container_name: followfeed
     volumes:
-      - .:/app
-      - ./data:/app/data
+      - ..:/app
+      - ../data:/app/data
     env_file:
-      - .env
+      - ../.env
     environment:
       - PYTHONPATH=/app
     restart: unless-stopped
