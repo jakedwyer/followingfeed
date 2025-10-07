@@ -26,6 +26,12 @@ data/
 user_details.json
 user_details.json.lock
 cookies.pkl
+twitter_cookies.pkl
+secure/
+passphrase.txt
+*.json.lock
+processed_records.json
+airtable_ids.json
 
 # Docker
 .docker/
@@ -47,9 +53,36 @@ aux
 *.zip
 git_push.log
 non_existing_users.json
-processed_records.json
 .benchmarks/
 .pytest_cache/
 .mypy_cache/
 .cache/
+cache/
 redis-data/
+pip-cache/
+chromedriver.zip
+
+# Deployment scripts
+deploy.sh
+push_to_git.sh
+scripts/push_to_git.sh
+scripts/deployment/
+
+# Service files
+*.service
+main.service
+deployment/
+
+# Workspace files
+*.code-workspace
+
+# API and script outputs
+api.log
+twitter_analyzer.log
+test_payload.json
+airtableschema.json
+path/
+
+# Old/legacy directories
+api_service/
+followingfeed/

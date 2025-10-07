@@ -180,7 +180,7 @@ class ProfileAnalyzer:
             # Set timeout for OpenAI API call
             response = await self._get_openai_analysis(analysis_prompt)
 
-            analysis_text = response.choices[0].message.content
+            analysis_text = response.output_text
             if not analysis_text:
                 logger.error("Empty response from OpenAI")
                 return {"error": "Empty analysis results"}
@@ -222,20 +222,42 @@ class ProfileAnalyzer:
     async def _get_openai_analysis(self, analysis_prompt: Dict[str, str]):
         """Get analysis from OpenAI with retries and rate limiting."""
         return await asyncio.to_thread(
-            client.chat.completions.create,
+            client.responses.create,
             # always use gpt-4o
             model="gpt-4o",
-            messages=[
+            input=[
                 {
                     "role": "system",
-                    "content": """Analyze the Twitter profile and its content to extract business information. Focus on key details only. Format as JSON with these fields:
-    - business_name: Business name or "Not explicitly mentioned"
-    - website: Business website or "Not explicitly mentioned"
-    - business_context: Brief business description (max 1000 words)""",
+                    "content": """Analyze the Twitter profile and its content to extract business information. Focus on key details only.""",
                 },
                 {"role": "user", "content": str(analysis_prompt)},
             ],
-            response_format={"type": "json_object"},
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "twitter_business_analysis",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "business_name": {
+                                "type": "string",
+                                "description": "Business name or 'Not explicitly mentioned'",
+                            },
+                            "website": {
+                                "type": "string",
+                                "description": "Business website or 'Not explicitly mentioned'",
+                            },
+                            "business_context": {
+                                "type": "string",
+                                "description": "Brief business description (max 1000 words)",
+                            },
+                        },
+                        "required": ["business_name", "website", "business_context"],
+                        "additionalProperties": False,
+                    },
+                    "strict": True,
+                }
+            },
             timeout=15,
         )
 

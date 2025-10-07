@@ -8,7 +8,7 @@ import unicodedata
 import re
 
 from dotenv import load_dotenv
-from pyairtable import Table
+from pyairtable import Api
 
 from utils.config import load_env_variables
 from utils.logging_setup import setup_logging
@@ -32,7 +32,8 @@ assert BASE_ID, "AIRTABLE_BASE_ID is not set in the environment variables."
 assert TABLE_ID, "AIRTABLE_ACCOUNTS_TABLE is not set in the environment variables."
 
 # Initialize Airtable API
-table = Table(AIRTABLE_TOKEN, BASE_ID, TABLE_ID)
+api = Api(AIRTABLE_TOKEN)
+table = api.table(BASE_ID, TABLE_ID)
 
 
 def get_unenriched_accounts() -> List[Tuple[str, str]]:
@@ -160,6 +161,7 @@ def main() -> None:
 
         # Process each unenriched record
         records_to_update = []
+        deleted_records_count = 0
         MAX_RETRIES = 3
         for record_id, username in unenriched_records:
             try:
@@ -200,6 +202,7 @@ def main() -> None:
                     )
                     # Only delete records that don't exist after all retries
                     delete_airtable_record(record_id)
+                    deleted_records_count += 1
 
             except Exception as e:
                 logger.error(f"Error processing {username}: {e}", exc_info=True)
@@ -210,6 +213,14 @@ def main() -> None:
             logger.info(f"Updated {len(records_to_update)} records in Airtable")
         else:
             logger.warning("No records to update in Airtable")
+
+        # Log summary of operations
+        logger.info(
+            f"Summary: {len(records_to_update)} records updated, {deleted_records_count} records deleted"
+        )
+        print(
+            f"Operation completed: {len(records_to_update)} records updated, {deleted_records_count} records deleted"
+        )
 
     except Exception as e:
         logger.exception(f"An unexpected error occurred: {e}")

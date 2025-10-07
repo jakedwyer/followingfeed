@@ -1,2 +1,0 @@
-# Run Twitter Analyzer monitoring script every 2 minutes
-*/2 * * * * root /root/followfeed/xfeed/bin/python /root/followfeed/deployment/monitor_service.py >> /var/log/twitter-analyzer/cron.log 2>&1 
