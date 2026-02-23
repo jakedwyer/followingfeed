@@ -1,0 +1,42 @@
+name: Sync to Droplet
+on:
+  push:
+    branches: ['**']
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: jake
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            export PATH="$HOME/.local/share/fnm:$HOME/.pyenv/bin:$HOME/.bun/bin:$HOME/.local/bin:$PATH"
+            eval "$(fnm env)" 2>/dev/null
+
+            REPO_DIR="$HOME/Dev/${{ github.event.repository.name }}"
+            BRANCH="${{ github.ref_name }}"
+
+            if [ ! -d "$REPO_DIR" ]; then
+              echo "Repo dir not found, cloning..."
+              cd ~/Dev
+              gh repo clone ${{ github.repository }} "${{ github.event.repository.name }}"
+              exit 0
+            fi
+
+            cd "$REPO_DIR"
+            git fetch --all --prune
+
+            CURRENT=$(git branch --show-current)
+            if [ "$CURRENT" = "$BRANCH" ]; then
+              if git diff --quiet && git diff --cached --quiet; then
+                git pull --ff-only || echo "FF not possible, fetch-only"
+              else
+                echo "Working tree dirty, fetch-only"
+              fi
+            else
+              echo "On branch $CURRENT, not $BRANCH — fetch-only"
+            fi
