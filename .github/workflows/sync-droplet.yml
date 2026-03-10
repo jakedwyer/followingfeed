@@ -14,11 +14,12 @@ jobs:
           username: jake
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
-            export PATH="$HOME/.local/share/fnm:$HOME/.pyenv/bin:$HOME/.bun/bin:$HOME/.local/bin:$PATH"
-            eval "$(fnm env)" 2>/dev/null
-
             REPO_DIR="$HOME/Dev/${{ github.event.repository.name }}"
-            BRANCH="${{ github.ref_name }}"
+
+            # Follow symlinks to canonical directory
+            if [ -L "$REPO_DIR" ]; then
+              REPO_DIR=$(readlink -f "$REPO_DIR")
+            fi
 
             if [ ! -d "$REPO_DIR" ]; then
               echo "Repo dir not found, cloning..."
@@ -30,6 +31,7 @@ jobs:
             cd "$REPO_DIR"
             git fetch --all --prune
 
+            BRANCH="${{ github.ref_name }}"
             CURRENT=$(git branch --show-current)
             if [ "$CURRENT" = "$BRANCH" ]; then
               if git diff --quiet && git diff --cached --quiet; then
