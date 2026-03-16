@@ -8,6 +8,12 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
+      - uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ""
+          oauth-secret: ""
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+
       - uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.DROPLET_HOST }}
